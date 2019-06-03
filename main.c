@@ -30,6 +30,85 @@ enum keyword {
     COM
 };
 
+#define U32 unsigned int
+#define U16 unsigned short
+#define U8 unsigned char
+
+#define ELF_MAGIC 0x464C457F
+//#define ELF_MAGIC 0
+#define ELF_CLASS_32 1
+#define ELF_CLASS_64 2
+#define ELF_DATA_LE 1
+#define ELF_DATA_BE 2
+#define ELF_VERSION 1
+#define ELF_OSABI_LINUX 0x03
+#define ELF_ABI_VERSION 0
+#define ELF_PAD_VALUE 0
+#define ELF_TYPE_EXEC 0x02
+#define ELF_MACHINE_X86 0x03
+#define ELF_MACHINE_X86_64 0x3E
+#define ELF_PHOFF_32 0x34
+
+
+
+typedef struct T_ELF {
+    U32 magic;
+    U8 ei_class;
+    U8 ei_data;
+    U8 ei_version;
+    U8 ei_osabi;
+    U8 ei_abiversion;
+    U8 ei_pad0;
+    U8 ei_pad1;
+    U8 ei_pad2;
+    U8 ei_pad3;
+    U8 ei_pad4;
+    U8 ei_pad5;
+    U8 ei_pad6;
+    U16 e_type;
+    U16 e_machine;
+    U32 e_version;
+    U32 e_entry;
+    U32 e_phoff;
+    U32 e_shoff;
+    U32 e_flags;
+    U16 e_ehsize;
+    U16 e_phentsize;
+    U16 e_phnum;
+    U16 e_shentsize;
+    U16 e_shnum;
+    U16 e_shstrndx;
+} T_ELF;
+
+typedef struct T_ELF_PRG32_HDR {
+    U32 p_type;
+    U32 p_offset;
+    U32 p_vaddr;
+    U32 p_paddr;
+    U32 p_filesz;
+    U32 p_memsz;
+    U32 p_align;
+} T_ELF_PRG32_HDR;
+
+T_ELF elf32 = { 
+    ELF_MAGIC, 
+    ELF_CLASS_32, 
+    ELF_DATA_LE, 
+    ELF_VERSION,
+    ELF_OSABI_LINUX,
+    ELF_ABI_VERSION,
+    ELF_PAD_VALUE,
+    ELF_PAD_VALUE,
+    ELF_PAD_VALUE,
+    ELF_PAD_VALUE,
+    ELF_PAD_VALUE,
+    ELF_PAD_VALUE,
+    ELF_PAD_VALUE,
+    ELF_TYPE_EXEC,
+    ELF_MACHINE_X86,
+    ELF_PHOFF_32  
+};
+
 void display_all_elt(T_ELT * current) {    
     do {
         for (int i = 0;i < current->len;i++) {
@@ -219,6 +298,12 @@ void display_node(T_NODE * node, int spacing) {
     display_node(node->next, spacing);
 }
 
+void write_output(char * filename) {
+    FILE * f = fopen(filename, "wb");
+    fwrite(&elf32, sizeof(T_ELF), 1, f);
+    fclose(f);
+}
+
 /*
 T_NODE * create_tree(T_ELT * head) {
     T_NODE * up = NULL;
@@ -254,4 +339,6 @@ void main(int c, char** argv) {
     T_NODE * up = add_desc_node(NULL, NULL);
     create_node_expr(up, elt);
     display_node(up,0);
+
+    write_output("out");
 }
