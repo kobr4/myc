@@ -1,3 +1,3 @@
 void main(int argc, char **argv) {
-  int a = 1;
+  int a = 77;
 }
