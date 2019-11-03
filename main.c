@@ -35,6 +35,7 @@ typedef struct T_NODE {
     enum keyword type;
     T_CTXT ctxt;
     struct T_NODE * asc;
+    int offset;
 } T_NODE;
 
 
@@ -153,18 +154,17 @@ typedef struct T_BUFFER {
     U8 buffer[10000];
     int length;
     int main_offset;
+    T_NODE * top;
 } T_BUFFER;
 
 
 U8 prog[] = {
     //0xB8, 0x01, 0x00, 0x00, 0x00, // MOV EAX, 1
     //0xBB, 0x01, 0x00, 0x00, 0x00, // MOV EBX, 1
-    0x89, 0xC3, //MOV EBX, EAX
+    0x89, 0xC3,                   // MOV EBX, EAX
     0xB8, 0x01, 0x00, 0x00, 0x00, // MOV EAX, 1
     0xCD, 0x80                    // INT 0x80
 };
-
-
 
 T_ELF_PRG32_HDR elf32_prg_hdr = {
     PT_LOAD,
@@ -289,11 +289,8 @@ T_NODE * add_next_node(T_NODE * node, T_ELT * elt, T_CTXT ctxt) {
     }
     node->next = new_n;
 
-
     return new_n;
 }
-
-
 
 T_ELT * tokenize(char * input,int size) {
     T_ELT * head = NULL;
@@ -420,17 +417,36 @@ int is_end(enum keyword k) {
     }
 }
 
+int is_matching(T_NODE * nodeA, T_NODE * nodeB) {
+
+   int minlen = (nodeA->elt->len > nodeB->elt->len)? nodeA->elt->len: nodeB->elt->len;
+
+    if (strncmp(nodeA->elt->str, nodeB->elt->str, minlen) == 0) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
 int is_procedure_body(T_NODE * up) {
     
     if ((up->type == EXPR) && is_type(up->ctxt.type)
-    && (up->desc != NULL) && (up->desc->type == PAR_O)) {
+        && (up->desc != NULL) && (up->desc->type == PAR_O)) {
         return 1;
     }
-    //printf("%d\n", up->type == EXPR);
-    //printf("%d\n", is_type(up->ctxt.type));
-    if (up->desc != NULL) printf("HERE%d\n", up->desc->type);
+
     return 0;
 }
+
+int is_procedure_call(T_NODE * up) {
+    if ((up->type == EXPR) && !is_type(up->ctxt.type)
+        && (up->desc->type == PAR_O)) {
+        return 1;
+    }
+
+    return 0;
+}
+
 
 int is_variable_decl(T_NODE * up) {
     if ((up->type == EXPR) && is_type(up->ctxt.type)) {
@@ -500,6 +516,7 @@ void asm_ret(T_BUFFER * buffer) {
     buffer->buffer[buffer->length++] = 0xC3;
 }
 
+//call [addr]
 void asm_call(T_BUFFER * buffer, int addr) {
     addr = addr - 5;
     printf("ASM CALL %x\n",addr);
@@ -516,13 +533,11 @@ int get_variable_offset(T_NODE * up, T_NODE * target, int current) {
     
     if (up->elt == NULL) return get_variable_offset(up->next, target, current);
 
-    int minlen = (target->elt->len > up->elt->len)? up->elt->len: target->elt->len;
-
     if (is_variable_decl(up)) {
         current += variable_size(up);
     }
 
-    if (strncmp(up->elt->str, target->elt->str, minlen) == 0) {
+    if (is_matching(up, target)) {
         current = current - variable_size(up);
         return current;
     }
@@ -536,7 +551,7 @@ int get_variable_offset(T_NODE * up, T_NODE * target, int current) {
 }
 
 int get_all_variable_offset(T_NODE * up, int current) {
-    
+
     if (up->elt == NULL) return get_all_variable_offset(up->next, current);
 
     if (is_variable_decl(up)) {
@@ -545,12 +560,17 @@ int get_all_variable_offset(T_NODE * up, int current) {
 
     if (up->next != NULL) {
         
-        get_all_variable_offset(up->next, current);
+        current = get_all_variable_offset(up->next, current);
     }
 
     return current;
 }
 
+T_NODE * skip(T_NODE * up) {
+    if (up == NULL || up->type == END)
+        return up;
+    else return skip(up->next);
+}
 
 void alloc_variable(T_NODE * up, T_BUFFER * buffer) {
     if (up->asc == NULL || up->asc->desc == NULL) 
@@ -572,13 +592,23 @@ void alloc_variable(T_NODE * up, T_BUFFER * buffer) {
         asm_load_eax(v, buffer);
         asm_store_variable(offset, buffer);
     }
+}
 
-    //printf("OFFSET IS %d\n", offset);
-    //asm_put_variable(offset, buffer);
+int proc_lookup(T_NODE * up, T_NODE * target) {
+    if (up == NULL) {
+        return -1;
+    }
 
+    if (is_procedure_body(up) && is_matching(up, target)) {
+        return up->offset;
+    } else {
+        return proc_lookup(up->next, target);
+    }
 }
 
 void semantic_browse(T_NODE * up, int level, T_BUFFER * buffer) {
+    display_elt(up->elt);
+    printf("\n");
 
     if (level == 0 && is_procedure_body(up)) {
         printf("BODY declaration for: ");
@@ -588,13 +618,13 @@ void semantic_browse(T_NODE * up, int level, T_BUFFER * buffer) {
         if (is_main(up->elt)) {
             buffer->main_offset = buffer->length;
         }
-        
+        up->offset = buffer->length;
 
         if (up->desc != NULL && up->desc->next != NULL)
-            return semantic_browse(up->desc->next, level + 1, buffer);
+            semantic_browse(up->desc->next->next->desc, level + 1, buffer);
 
     } else if (is_variable_decl(up)) {
-        printf("variable declaration for: ");
+        printf("VARIABLE declaration for: ");
         display_elt(up->elt);
         printf("\n"); 
 
@@ -604,26 +634,26 @@ void semantic_browse(T_NODE * up, int level, T_BUFFER * buffer) {
             alloc_variable(up, buffer);
         }
 
-    } else {
+        up = skip(up);
+    } else if(is_procedure_call(up)){
+        printf("PROCEDURE call for: ");
+        display_elt(up->elt);
+        printf("\n"); 
 
-        if (up->desc != NULL) {
-            return semantic_browse(up->desc, level + 1, buffer);
-        }        
+        int offset = proc_lookup(buffer->top, up);
+        if (offset == -1) error("No matching proc declaration.");
 
-        if (up->next != NULL) {
-            return semantic_browse(up->next, level, buffer);
-        }
+        asm_call(buffer, offset - buffer->length);
 
+        up = skip(up);
+    } 
+    
+    if (up->next != NULL)
+        semantic_browse(up->next, level, buffer);
+    else if (level == 1) {
+        printf("RET %d\n", get_all_variable_offset(up->asc->desc, 0));
 
-    }
-
-        printf("HERE");
-    display_elt(up->elt);
-    puts("");
-
-    if (level == 2) {
-        puts("RET");
-        asm_remove_variable(up->asc->desc, buffer, get_all_variable_offset(up, 0));
+        asm_remove_variable(up->asc->desc, buffer, get_all_variable_offset(up->asc->desc, 0));
         asm_ret(buffer);
     }   
 
@@ -695,6 +725,7 @@ void main(int c, char** argv) {
     
     T_BUFFER * buffer = (T_BUFFER *)malloc(sizeof(T_BUFFER));
     buffer->length = 0;
+    buffer->top = up;
     semantic_browse(up, 0, buffer);
     
     write_output("out", buffer);
