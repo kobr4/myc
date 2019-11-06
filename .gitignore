@@ -55,3 +55,5 @@ main
 out
 *.s
 sample2.c
+fibo.c
+fibo

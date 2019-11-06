@@ -11,11 +11,18 @@ enum keyword {
     ACC_C,
     ACC_O,
     PTR,
-    OP,
+    ADD,
+    SUB,
     END,
     EXPR,
     COM,
-    EQ
+    EQ,
+    IF,
+    ELSE,
+    SUP,
+    INF,
+    RET,
+    EQEQ
 } T_KEYWORD;
 
 typedef struct T_CTXT {
@@ -157,6 +164,7 @@ typedef struct T_BUFFER {
     T_NODE * top;
     T_NODE * local_symbol[100];
     int local_symbol_count;
+    int stack_modifier;
 } T_BUFFER;
 
 
@@ -217,15 +225,22 @@ enum keyword type(T_ELT * elt) {
     if (elt->len == 4 && strncmp(elt->str, "void", elt->len) == 0) result = VOID;
     else if (elt->len == 3 && strncmp(elt->str, "int", elt->len) == 0) result = INT;
     else if (elt->len == 4 && strncmp(elt->str, "char", elt->len) == 0) result = CHAR;
+    else if (elt->len == 2 && strncmp(elt->str, "if", elt->len) == 0) result = IF;
+    else if (elt->len == 4 && strncmp(elt->str, "else", elt->len) == 0) result = ELSE;
+    else if (elt->len == 6 && strncmp(elt->str, "return", elt->len) == 0) result = RET;
+    else if (elt->len == 2 && strncmp(elt->str, "==", elt->len) == 0) result = EQEQ;
     else if (strncmp(elt->str, "(", elt->len) == 0) result = PAR_O;
     else if (strncmp(elt->str, ")", elt->len) == 0) result = PAR_C;
     else if (strncmp(elt->str, "{", elt->len) == 0) result = ACC_O;
     else if (strncmp(elt->str, "}", elt->len) == 0) result = ACC_C;
     else if (strncmp(elt->str, "*", elt->len) == 0) result = PTR;
-    else if (strncmp(elt->str, "+", elt->len) == 0) result = OP;
+    else if (strncmp(elt->str, "+", elt->len) == 0) result = ADD;
+    else if (strncmp(elt->str, "-", elt->len) == 0) result = SUB;
     else if (strncmp(elt->str, ";", elt->len) == 0) result = END;
     else if (strncmp(elt->str, ",", elt->len) == 0) result = COM;
     else if (strncmp(elt->str, "=", elt->len) == 0) result = EQ;
+    else if (strncmp(elt->str, ">", elt->len) == 0) result = SUP;
+    else if (strncmp(elt->str, "<", elt->len) == 0) result = INF;
     return result;
 } 
 
@@ -367,8 +382,6 @@ void create_node_expr(T_NODE * up, T_ELT * current, T_CTXT ctxt) {
             ctxt.type = t_current;
             create_node_expr(up, current->next, ctxt);
             break;
-        
-        //case END:
         case PAR_C:
         case ACC_C:
             ctxt.type = t_current;
@@ -377,15 +390,23 @@ void create_node_expr(T_NODE * up, T_ELT * current, T_CTXT ctxt) {
             break;
         case END:
         case EQ:
-        case OP:
+        case ADD:
+        case SUB:
+        case INF:
+        case SUP:
+        case EQEQ:
+        case RET:
+        case COM:
             ctxt.type = t_current;
             current_n = add_next_node(up, current, ctxt);
             create_node_expr(current_n, current->next, ctxt);      
             break;
+            /*
         case COM:
             ctxt.type = t_current;
             create_node_expr(up, current->next, ctxt);
             break;
+            */
         case PAR_O:
         case ACC_O:
             ctxt.type = t_current;
@@ -393,6 +414,8 @@ void create_node_expr(T_NODE * up, T_ELT * current, T_CTXT ctxt) {
             current_n = add_desc_node(current_n, NULL);
             create_node_expr(current_n, current->next, ctxt);
             break;
+        case IF:
+        case ELSE:
         case EXPR:
             current_n = add_next_node(up, current, ctxt);
             create_node_expr(current_n, current->next, ctxt);
@@ -479,15 +502,20 @@ int variable_size(T_NODE * up) {
             break;
         default:
             puts("ERROR variable_size");
-            exit(0);
-            return 0;
+            puts("element: [");
+            display_elt(up->elt);
+            printf("]\n");       
+            printf("TYPE: %d %d\n", up->ctxt.type, INT);      
+            return 4;
+            //exit(0);
+            //return 0;
 
     }
 }
 
 // mov EAX, value
 void asm_load_eax(int value, T_BUFFER * buffer) {
-    printf("mov eax,  %d\n", value);
+    printf("[ASM][%x] mov eax,  %d\n", buffer->length, value);
     buffer->buffer[buffer->length++] = 0xB8; 
     buffer->buffer[buffer->length++] = (value & 0xff);
     buffer->buffer[buffer->length++] = (value & 0xff00) >> 8;
@@ -498,7 +526,7 @@ void asm_load_eax(int value, T_BUFFER * buffer) {
 //sub esp, size
 void asm_add_variable(T_NODE * up, T_BUFFER * buffer) {
     U8 size  = variable_size(up);
-    printf("sub esp, %d\n", size);
+    printf("[ASM][%x] sub esp, %d\n", buffer->length, size);
     buffer->buffer[buffer->length++] = 0x83; 
     buffer->buffer[buffer->length++] = 0xEC;
     buffer->buffer[buffer->length++] = size;
@@ -506,7 +534,7 @@ void asm_add_variable(T_NODE * up, T_BUFFER * buffer) {
 
 // mov eax, DWORD PTR SS:[esp]
 void asm_retrieve_variable(int offset, T_BUFFER * buffer) {
-    printf("mov eax, DWORD PTR SS:[esp + %d]\n", offset);
+    printf("[ASM][%x] mov eax, DWORD PTR SS:[esp + %d]\n", buffer->length, offset);
     buffer->buffer[buffer->length++] = 0x8B;
     buffer->buffer[buffer->length++] = 0x44; 
     buffer->buffer[buffer->length++] = 0x24;
@@ -515,9 +543,17 @@ void asm_retrieve_variable(int offset, T_BUFFER * buffer) {
 
 //add DWORD PTR SS:[esp], eax
 void asm_add_variable_and_store(int offset, T_BUFFER * buffer) {
-    //buffer->buffer[buffer->length++] = 0x01;
-    printf("add DWORD PTR SS:[esp + %d], eax\n", offset);
+    printf("[ASM][%x] add DWORD PTR SS:[esp + %d], eax\n", buffer->length, offset);
     buffer->buffer[buffer->length++] = 0x01;
+    buffer->buffer[buffer->length++] = 0x44;
+    buffer->buffer[buffer->length++] = 0x24;
+    buffer->buffer[buffer->length++] = offset;
+}
+
+//sub DWORD PTR SS:[esp], eax
+void asm_sub_variable_and_store(int offset, T_BUFFER * buffer) {
+    printf("[ASM][%x] sub DWORD PTR SS:[esp + %d], eax\n", buffer->length, offset);
+    buffer->buffer[buffer->length++] = 0x29;
     buffer->buffer[buffer->length++] = 0x44;
     buffer->buffer[buffer->length++] = 0x24;
     buffer->buffer[buffer->length++] = offset;
@@ -526,7 +562,7 @@ void asm_add_variable_and_store(int offset, T_BUFFER * buffer) {
 //mov DWORD PTR SS:[esp], eax
 void asm_store_variable(int offset, T_BUFFER * buffer) {
     
-    printf("mov DWORD PTR SS:[esp + %d], eax\n", offset);
+    printf("[ASM][%x] mov DWORD PTR SS:[esp + %d], eax\n", buffer->length, offset);
     buffer->buffer[buffer->length++] = 0x89;
     buffer->buffer[buffer->length++] = 0x44; 
     buffer->buffer[buffer->length++] = 0x24;
@@ -535,7 +571,7 @@ void asm_store_variable(int offset, T_BUFFER * buffer) {
 
 //add esp, size
 void asm_remove_variable(T_BUFFER * buffer, U8 size) {
-    printf("add esp, %d\n", size);
+    printf("[ASM][%x] add esp, %d\n", buffer->length, size);
     buffer->buffer[buffer->length++] = 0x83; 
     buffer->buffer[buffer->length++] = 0xC4;
     buffer->buffer[buffer->length++] = size;    
@@ -543,13 +579,14 @@ void asm_remove_variable(T_BUFFER * buffer, U8 size) {
 
 //ret
 void asm_ret(T_BUFFER * buffer) {
+    printf("[ASM][%x] ret\n", buffer->length);
     buffer->buffer[buffer->length++] = 0xC3;
 }
 
 //call [addr]
 void asm_call(T_BUFFER * buffer, int addr) {
     addr = addr - 5;
-    printf("ASM CALL %x\n",addr);
+    printf("[ASM][%x] call %x\n",buffer->length, addr);
     buffer->buffer[buffer->length++] = 0xE8;    
     buffer->buffer[buffer->length++] = (addr & 0xff);
     buffer->buffer[buffer->length++] = (addr & 0xff00) >> 8;
@@ -558,25 +595,91 @@ void asm_call(T_BUFFER * buffer, int addr) {
 
 }
 
-int get_variable_offset(T_NODE * target, T_BUFFER * buffer) {
+//mov ebx, eax
+void asm_mov_ebx_eax(T_BUFFER * buffer) {
+    printf("[ASM][%x] mov ebx, eax\n", buffer->length);
+    buffer->buffer[buffer->length++] = 0x89; 
+    buffer->buffer[buffer->length++] = 0xC3;     
+}
+
+//cmp eax, ebx
+void asm_cmp_eax_ebx(T_BUFFER * buffer) {
+    printf("[ASM][%x] cmp eax, ebx\n", buffer->length);
+    buffer->buffer[buffer->length++] = 0x39; 
+    buffer->buffer[buffer->length++] = 0xD8;        
+}
+
+//jg addr
+void asm_jump_greater(T_BUFFER * buffer, U32 addr) {
+    printf("[ASM][%x] jg %x\n",buffer->length, addr);
+    buffer->buffer[buffer->length++] = 0x0F;
+    buffer->buffer[buffer->length++] = 0x8F;
+    buffer->buffer[buffer->length++] = (addr & 0xff);
+    buffer->buffer[buffer->length++] = (addr & 0xff00) >> 8;
+    buffer->buffer[buffer->length++] = (addr & 0xff0000) >> 16;
+    buffer->buffer[buffer->length++] = (addr & 0xff000000) >> 24;
+}
+
+//jl addr
+void asm_jump_less(T_BUFFER * buffer, U32 addr) {
+    printf("[ASM][%x] jl %x\n",buffer->length, addr);
+    buffer->buffer[buffer->length++] = 0x0F;
+    buffer->buffer[buffer->length++] = 0x8C;
+    buffer->buffer[buffer->length++] = (addr & 0xff);
+    buffer->buffer[buffer->length++] = (addr & 0xff00) >> 8;
+    buffer->buffer[buffer->length++] = (addr & 0xff0000) >> 16;
+    buffer->buffer[buffer->length++] = (addr & 0xff000000) >> 24;
+}
+
+//je addr
+void asm_jump_equal(T_BUFFER * buffer, U32 addr) {
+    printf("[ASM][%x] je %x\n",buffer->length, addr);
+    buffer->buffer[buffer->length++] = 0x0F;
+    buffer->buffer[buffer->length++] = 0x84;
+    buffer->buffer[buffer->length++] = (addr & 0xff);
+    buffer->buffer[buffer->length++] = (addr & 0xff00) >> 8;
+    buffer->buffer[buffer->length++] = (addr & 0xff0000) >> 16;
+    buffer->buffer[buffer->length++] = (addr & 0xff000000) >> 24;
+}
+
+//jne addr
+void asm_jump_not_equal(T_BUFFER * buffer, U32 addr) {
+    printf("[ASM][%x] jne %x\n",buffer->length, addr);
+    buffer->buffer[buffer->length++] = 0x0F;
+    buffer->buffer[buffer->length++] = 0x85;
+    buffer->buffer[buffer->length++] = (addr & 0xff);
+    buffer->buffer[buffer->length++] = (addr & 0xff00) >> 8;
+    buffer->buffer[buffer->length++] = (addr & 0xff0000) >> 16;
+    buffer->buffer[buffer->length++] = (addr & 0xff000000) >> 24;
+}
+
+
+//jmp addr
+void asm_jump(T_BUFFER * buffer, U32 addr) {
+    printf("[ASM][%x] jmp %x\n",buffer->length, addr);
+    buffer->buffer[buffer->length++] = 0xE9;
+    buffer->buffer[buffer->length++] = (addr & 0xff);
+    buffer->buffer[buffer->length++] = (addr & 0xff00) >> 8;
+    buffer->buffer[buffer->length++] = (addr & 0xff0000) >> 16;
+    buffer->buffer[buffer->length++] = (addr & 0xff000000) >> 24;
+}
+
+int get_variable_offset(T_NODE * target, T_BUFFER * buffer) {  
     int offset = 0;
     for (int i = 0; (i < buffer->local_symbol_count) && (!is_matching(buffer->local_symbol[buffer->local_symbol_count - i - 1], target));i++) {        
         offset += variable_size(buffer->local_symbol[buffer->local_symbol_count - i - 1]);
     }
-    return offset;
+    return offset + buffer->stack_modifier;
 }
 
 int get_all_variable_offset(T_BUFFER * buffer) {
     int offset = 0;
     for (int i = 0;i < buffer->local_symbol_count && buffer->local_symbol[buffer->local_symbol_count - i - 1]->elt != NULL;i++) {
-        //printf("%d: [", i);
-        //display_elt(buffer->local_symbol[buffer->local_symbol_count - i - 1]->elt);
-        //printf("] %d\n",buffer->local_symbol[buffer->local_symbol_count - i - 1]->elt);
 
         if (buffer->local_symbol[buffer->local_symbol_count - i - 1]->elt != NULL)
             offset += variable_size(buffer->local_symbol[buffer->local_symbol_count - i - 1]);
     }
-    return offset;
+    return offset + buffer->stack_modifier;
 }
 
 T_NODE * skip(T_NODE * up) {
@@ -596,63 +699,36 @@ int proc_lookup(T_NODE * up, T_NODE * target) {
         return proc_lookup(up->next, target);
     }
 }
+void alloc_variable(T_NODE * up, int stack_offset, T_NODE * oper,T_BUFFER * buffer);
+
 
 int stack_parameters(T_NODE * up, T_BUFFER * buffer) {
     puts("STACK parameter [");
     display_elt(up->elt);
     printf("]\n"); 
-    if (up->elt == NULL)
+    int offset = 0;
+    if (up->elt == NULL || up->type == COM)
         return  stack_parameters(up->next, buffer);
 
-    if (up->elt != NULL && is_number(up->elt)) {
-        puts("ADDING NUMBER PARAMETER");
-
-        T_ELT * elt = up->elt; 
-        char value[32];
-        for (int i = 0;i < elt->len;i++) {
-            value[i] = elt->str[i]; 
-        }
-
-        value[elt->len] = 0;
-
-        int v = atoi(value);
+    if (up->elt != NULL) {
         
-        asm_load_eax(v, buffer);
-
         asm_add_variable(up, buffer);
-        asm_store_variable(0, buffer);
-     
-     } 
-     
-     /*
-     else if(is_procedure_call(up)){
-        
-        printf("PROCEDURE call for: ");
-        display_elt(up->elt);
-        printf("\n"); 
+        buffer->stack_modifier += 4;
+        alloc_variable(up, 0, NULL, buffer);
+        buffer->stack_modifier -= 4;
+        //asm_store_variable(0, buffer);
 
-        int offset = proc_lookup(buffer->top, up);
-        if (offset == -1) error("No matching proc declaration.");
+        //dodgy !
+        //offset = variable_size(up);
+        offset = 4; 
 
-        int call_stack_offset = 0;
-        if (up->desc != NULL && up->desc->type == PAR_O)
-            call_stack_offset = stack_parameters(up->desc->desc, buffer);
-        else 
-            error("Invalid procedure call");
-
-        asm_call(buffer, offset - buffer->length);
-
-        asm_remove_variable(buffer, call_stack_offset);
-
+        while(up != NULL && up->type != PAR_C && up->type != COM) up = up->next;
+        //puts("koko");
     }
-*/
-    int offset = variable_size(up);
     
-    
-    if (up->next != NULL) {
-        offset += stack_parameters(up->next, buffer);
+    if (up != NULL) {
+        offset += stack_parameters(up, buffer);
     } 
-
 
     return offset;
 }
@@ -700,24 +776,83 @@ void alloc_variable(T_NODE * up, int stack_offset, T_NODE * oper,T_BUFFER * buff
         asm_remove_variable(buffer, call_stack_offset);   
         printf("CALL STACK LENGTH %d\n", call_stack_offset);
 
-    } else if (up->type == EXPR){
+    } else if (up->type == EXPR && stack_offset != -1){
         printf("VARIABLE retrieve for: ");
         display_elt(up->elt);
         printf("\n"); 
 
         int offset = get_variable_offset(up, buffer);
         asm_retrieve_variable(offset, buffer);
+    } else if (up->type == EXPR) {
+        printf("VARIABLE assign for: ");
+        display_elt(up->elt);
+        printf("\n");        
+
+        int offset = get_variable_offset(up, buffer);
+        asm_retrieve_variable(offset, buffer);
+        
+        /*
+        if (up->next != NULL && up->next->type == EQ && up->next->next != NULL) {
+            alloc_variable(up->next->next, offset, NULL, buffer);
+        }
+        */
+       if (up->next != NULL) {
+           alloc_variable(up->next, offset, oper, buffer);
+       }
+       return;
+    } else if (up->type == SUP || up->type == INF || up->type == EQEQ) {
+        
+        puts("STORING TO EBX FOR COMP");
+        asm_mov_ebx_eax(buffer);
+        alloc_variable(up->next, -1, up, buffer);
+        asm_cmp_eax_ebx(buffer);
+        if (up-> type == INF)
+            asm_jump_less(buffer, 0);
+        else if (up->type == SUP)
+            asm_jump_greater(buffer, 0);
+        else asm_jump_not_equal(buffer, 0); 
+        return;   
+
+    } else if (up->type == RET) {
+        /*
+puts("kokoo");
+exit(0);
+        alloc_variable(up->next, -1, NULL, buffer);
+        asm_retrieve_variable(0, buffer);
+        asm_remove_variable(buffer, get_all_variable_offset(buffer));
+        asm_ret(buffer);
+        */
+        asm_add_variable(up, buffer);
+        buffer->stack_modifier += 4;
+        alloc_variable(up->next, 0, NULL, buffer);
+        asm_retrieve_variable(0, buffer);
+
+        buffer->stack_modifier -= 4;
+        asm_remove_variable(buffer, 4);
+
+        
+        asm_remove_variable(buffer, get_all_variable_offset(buffer));
+        asm_ret(buffer);       
+        return;
     }
 
-    if (oper == NULL) {
+    if (oper == NULL && stack_offset != -1) {
         asm_store_variable(stack_offset, buffer);
-    } else if (oper->type == OP) {
-        puts("ADDING HERE");
+    } else if (oper != NULL && oper->type == ADD) {
         asm_add_variable_and_store(stack_offset, buffer);
+    } else if (oper != NULL && oper->type == SUB) {
+        asm_sub_variable_and_store(stack_offset, buffer);
+    } 
+    /*
+    else if (oper->type == SUP || oper->type == INF) {
+        puts("HANDLING IF STATEMENT !! !! !");
     }
+    */
 
-    if (up->next != NULL && up->next->type != END) {
-        alloc_variable(up->next->next, stack_offset, up->next, buffer);
+    if (up->next != NULL && up->next->type != END && up->next->type != COM) {
+        
+        //alloc_variable(up->next->next, stack_offset, up->next, buffer);
+        alloc_variable(up->next, stack_offset, up, buffer);
     } 
 }
 
@@ -787,16 +922,68 @@ void semantic_browse(T_NODE * up, int level, T_BUFFER * buffer) {
 
         up = skip(up);
                 
-    } 
+    } else if (up->type == IF){
+        puts("IF STATEMENT");
+        U8 * jgptr = NULL;
+        U8 * jmptr = NULL; 
+        U32 offset = 0;
+        U32 offset2 = 0;
+        if (up->desc != NULL && up->desc->desc != NULL && up->desc->desc->next != NULL) {
+            alloc_variable(up->desc->desc->next, -1, NULL, buffer);
+            jgptr = &(buffer->buffer[buffer->length - 4]);
+            offset = buffer->length;
+        } else error("Error on \"if\" statement. condition clause");
+
+
+        puts("IF FIRST BODY");
+        if (up->desc != NULL && up->desc->next != NULL && up->desc->next->next != NULL && up->desc->next->next->desc != NULL && up->desc->next->next->desc->next != NULL) {
+            alloc_variable(up->desc->next->next->desc->next, -1, NULL, buffer);
+            asm_jump(buffer, 0);
+            jmptr = &buffer->buffer[buffer->length - 4];
+            offset2 = buffer->length;
+        } else error("Error on \"if\" statement. first condition body");
+        
+        offset = buffer->length - offset;
+        memcpy( jgptr, &offset, sizeof(U32) );
+
+        puts("IF SECOND BODY");
+        if (up->next != NULL && up->next->type == ELSE) 
+            if (up->next->desc != NULL && up->next->desc->desc != NULL && up->next->desc->desc->next != NULL) {
+                alloc_variable(up->next->desc->desc->next, -1, NULL, buffer);
+            } else error("Error on \"if\" statement. second condition body");
+
+        offset2 = buffer->length - offset2;
+        memcpy( jmptr, &offset2, sizeof(U32) );
+        
+        if (up->next != NULL && up->next->type == ELSE)
+            up = up->next;
+
+    } else if (up->type == RET) {
+        
+        asm_add_variable(up, buffer);
+        buffer->stack_modifier += 4;
+        alloc_variable(up->next, 0, NULL, buffer);
+        asm_retrieve_variable(0, buffer);
+
+        buffer->stack_modifier -= 4;
+        asm_remove_variable(buffer, 4);
+
+        
+        asm_remove_variable(buffer, get_all_variable_offset(buffer));
+        asm_ret(buffer);
+        up = skip(up);
+    }
     
     if (up != NULL && up->next != NULL)
         semantic_browse(up->next, level, buffer);
     else if (level == 1) {
+        /*
         asm_retrieve_variable(0, buffer);
         printf("RET %d\n", get_all_variable_offset(buffer));
 
         asm_remove_variable(buffer, get_all_variable_offset(buffer));
         asm_ret(buffer);
+        */
     }   
 
 }
@@ -872,6 +1059,7 @@ void main(int c, char** argv) {
     buffer->length = 0;
     buffer->top = up;
     buffer->local_symbol_count = 0;
+    buffer->stack_modifier = 0;
     semantic_browse(up, 0, buffer);
     
     write_output("out", buffer);
