@@ -701,7 +701,7 @@ int proc_lookup(T_NODE * up, T_NODE * target) {
         return proc_lookup(up->next, target);
     }
 }
-void alloc_variable(T_NODE * up, int stack_offset, T_NODE * oper,T_BUFFER * buffer);
+T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer);
 
 int add_local_symbol(T_NODE * up, T_BUFFER * buffer, char is_anon) {
     asm_add_variable(up, buffer);
@@ -713,16 +713,43 @@ int add_local_symbol(T_NODE * up, T_BUFFER * buffer, char is_anon) {
     return buffer->local_symbol_count - 1;
 }
 
-void stack_parameters(T_NODE * up, T_BUFFER * buffer) {
-    display_elt_ctxt("STACK parameter: ", up->elt);  
+T_NODE * one(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
+    
+    return step(up, stack_offset, buffer);;
+}
 
+T_NODE * line(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
+    while (up != NULL && up->type != END && up->type != COM) {
+        up = one(up, stack_offset, buffer);
+        if (up != NULL)
+            up = up->next;
+    }
+    return up;
+}
+
+T_NODE * block(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
+    while (up != NULL) {
+        up = line(up, stack_offset, buffer);
+        if (up != NULL)
+            up = up->next;
+    }
+    return up;
+}
+
+void stack_parameters(T_NODE * up, T_BUFFER * buffer) {
     if (up->elt == NULL || up->type == COM)
         return  stack_parameters(up->next, buffer);
 
+    display_elt_ctxt("STACK parameter: ", up->elt);  
+
     if (up->elt != NULL) {
         int doffset = add_local_symbol(up, buffer, 1);
-        alloc_variable(up, doffset, NULL, buffer);
-
+        
+        one(up, -1, buffer);
+        asm_store_variable(get_variable_dynamic_offset(doffset, buffer), buffer);
+        if (up->next != NULL)
+            line(up->next, doffset, buffer);
+        
         //dodgy !
         //offset = variable_size(up);
         while(up != NULL && up->type != PAR_C && up->type != COM) up = up->next;
@@ -744,10 +771,10 @@ void parameter_scan(T_NODE * up, T_BUFFER * buffer) {
 
 
 
-void alloc_variable(T_NODE * up, int stack_offset, T_NODE * oper,T_BUFFER * buffer) {
-    display_elt_ctxt("ALLOC VARIABLE: ", up->elt);    
+T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
+    display_elt_ctxt("STEP: ", up->elt);    
 
-    if (up == NULL) error("INVALID VARIABLE ALLOC");
+    if (up == NULL) error("INVALID STEP");
 
     if (is_procedure_body(up)) {
         display_elt_ctxt("Body declaration: ", up->elt);
@@ -766,20 +793,13 @@ void alloc_variable(T_NODE * up, int stack_offset, T_NODE * oper,T_BUFFER * buff
         printf("LOCAL SYMBOL IN SIGNATURE: %d\n", buffer->local_symbol_count);
         buffer->local_symbol[buffer->local_symbol_count++] = &dummy; // Symbol for return adress of the call
 
-        if (up->desc != NULL && up->desc->next != NULL)
-            alloc_variable(up->desc->next->next->desc, -1, NULL, buffer);
-        //up = up->desc->next->next->desc;
+        return block(up->desc->next->next->desc, -1, buffer);
     } else if (is_variable_decl(up)) {
         display_elt_ctxt("Variable declaration: ", up->elt);
 
-        int doffset = add_local_symbol(up, buffer, 0);
-    
-        if (up->next != NULL && up->next->type == EQ) {
-            alloc_variable(up->next->next, doffset, NULL,buffer);
-        }
+        int doffset = add_local_symbol(up, buffer, 0);  
 
-        up = skip(up);
-
+        return line(up->next, doffset, buffer);
     } else if (is_number(up->elt)) {
         
         T_ELT * elt = up->elt; 
@@ -793,7 +813,8 @@ void alloc_variable(T_NODE * up, int stack_offset, T_NODE * oper,T_BUFFER * buff
         int v = atoi(value);
     
         asm_load_eax(v, buffer);
-     
+        return up;
+
      } else if(is_procedure_call(up)){
         display_elt_ctxt("Procedure call: ", up->elt);
 
@@ -806,34 +827,37 @@ void alloc_variable(T_NODE * up, int stack_offset, T_NODE * oper,T_BUFFER * buff
             error("Invalid procedure call");
 
         asm_call(buffer, offset - buffer->length);
-
+        
+        return up;
     } else if (up->type == EXPR) {
         display_elt_ctxt("Variable assign: ", up->elt);
-
         asm_retrieve_variable(get_variable_offset(up, buffer), buffer);
-
+        return up;
     } else if (up->type == SUP || up->type == INF || up->type == EQEQ) {
         
         puts("STORING TO EBX FOR COMP");
         asm_mov_ebx_eax(buffer);
-        alloc_variable(up->next, -1, up, buffer);
+        T_NODE * end = line(up->next, -1, buffer);
         asm_cmp_eax_ebx(buffer);
         if (up-> type == INF)
             asm_jump_less(buffer, 0);
         else if (up->type == SUP)
             asm_jump_greater(buffer, 0);
         else asm_jump_not_equal(buffer, 0); 
-        return;   
+        return end;   
 
     } else if (up->type == RET) {
 
         int doffset = add_local_symbol(up, buffer, 1);
-        
-        alloc_variable(up->next, doffset, NULL, buffer);
+        T_NODE * last = one(up->next, -1, buffer);
+        asm_store_variable(get_variable_dynamic_offset(doffset, buffer), buffer);
+        if (last != NULL && last->next != NULL)
+            last = line(last->next, doffset, buffer);
+
         asm_retrieve_variable( get_variable_dynamic_offset(doffset, buffer), buffer);
         asm_remove_variable(buffer, get_all_variable_offset(buffer));
-        asm_ret(buffer);       
-        return;
+        asm_ret(buffer);      
+        return last;
 
     } else if (up->type == IF){
 
@@ -843,7 +867,7 @@ void alloc_variable(T_NODE * up, int stack_offset, T_NODE * oper,T_BUFFER * buff
         U32 offset = 0;
         U32 offset2 = 0;
         if (up->desc != NULL && up->desc->desc != NULL && up->desc->desc->next != NULL) {
-            alloc_variable(up->desc->desc->next, -1, NULL, buffer);
+            block(up->desc->desc->next, -1, buffer);
             jgptr = &(buffer->buffer[buffer->length - 4]);
             offset = buffer->length;
         } else error("Error on \"if\" statement. condition clause");
@@ -852,7 +876,7 @@ void alloc_variable(T_NODE * up, int stack_offset, T_NODE * oper,T_BUFFER * buff
         puts("IF FIRST BODY");
         int local_sym_count = buffer->local_symbol_count;
         if (up->desc != NULL && up->desc->next != NULL && up->desc->next->next != NULL && up->desc->next->next->desc != NULL && up->desc->next->next->desc->next != NULL) {
-            alloc_variable(up->desc->next->next->desc->next, -1, NULL, buffer);
+            block(up->desc->next->next->desc->next, -1, buffer);
             asm_jump(buffer, 0);
             jmptr = &buffer->buffer[buffer->length - 4];
             offset2 = buffer->length;
@@ -866,7 +890,7 @@ void alloc_variable(T_NODE * up, int stack_offset, T_NODE * oper,T_BUFFER * buff
         
         if (up->next != NULL && up->next->type == ELSE) 
             if (up->next->desc != NULL && up->next->desc->desc != NULL && up->next->desc->desc->next != NULL) {
-                alloc_variable(up->next->desc->desc->next, -1, NULL, buffer);
+                block(up->next->desc->desc->next, -1, buffer);
             } else error("Error on \"if\" statement. second condition body");
 
         buffer->local_symbol_count  = local_sym_count;
@@ -876,21 +900,27 @@ void alloc_variable(T_NODE * up, int stack_offset, T_NODE * oper,T_BUFFER * buff
         if (up->next != NULL && up->next->type == ELSE)
             up = up->next;
 
-    } 
+        return up;
 
-    if (oper == NULL && stack_offset != -1) {
+    } else if (up->type == EQ) {
+
+        T_NODE * last = one(up->next, stack_offset, buffer);
         asm_store_variable(get_variable_dynamic_offset(stack_offset, buffer), buffer);
-    } else if (oper != NULL && oper->type == ADD) {
+        return last;
+        
+    } else if (up->type == ADD) {
+        T_NODE * last = one(up->next, stack_offset, buffer);
         asm_add_variable_and_store(get_variable_dynamic_offset(stack_offset, buffer), buffer);
-    } else if (oper != NULL && oper->type == SUB) {
-        asm_sub_variable_and_store(get_variable_dynamic_offset(stack_offset, buffer), buffer);
-    } 
+ 
+        return last;
 
-    if (up->next != NULL && up->next->type != END && up->next->type != COM) {
-        alloc_variable(up->next, stack_offset, up, buffer);
+    } else if (up->type == SUB) {
+        T_NODE * last = one(up->next, stack_offset, buffer);
+        asm_sub_variable_and_store(get_variable_dynamic_offset(stack_offset, buffer), buffer);
+ 
+        return last;
     } 
 }
-
 
 void display_node(T_NODE * node, int spacing) {
     if (node == NULL) 
@@ -966,8 +996,11 @@ void main(int c, char** argv) {
     buffer->length = 0;
     buffer->top = up;
     buffer->local_symbol_count = 0;
- 
-    alloc_variable(up, -1, NULL, buffer);
+    
+    while(up != NULL) {
+        one(up, -1, buffer);
+        up = up->next; 
+    };
     write_output("out", buffer);
     free(buffer);
     free(filedata);
