@@ -211,6 +211,12 @@ void display_elt(T_ELT * current) {
     }
 }
 
+void display_elt_ctxt(char * msg, T_ELT * elt) {
+    printf("%s [", msg);
+    display_elt(elt);
+    printf("]\n");
+}
+
 char * read_file(char * filename, int * size) {
     
     FILE * file = fopen(filename, "r");
@@ -497,10 +503,7 @@ int variable_size(T_NODE * up) {
             return 1;
             break;
         default:
-            puts("ERROR variable_size");
-            puts("element: [");
-            display_elt(up->elt);
-            printf("]\n");       
+            display_elt_ctxt("Error on variable size: ", up->elt);    
             printf("TYPE: %d %d\n", up->ctxt.type, INT);      
             return 4;
             //exit(0);
@@ -655,8 +658,7 @@ int get_variable_offset(T_NODE * target, T_BUFFER * buffer) {
 
 int get_variable_dynamic_offset(int target, T_BUFFER * buffer) {
     int offset = 0;
-    for (int i = buffer->local_symbol_count - 1; i > target ;i--) {       
-        printf("[%d]\n", i); 
+    for (int i = buffer->local_symbol_count - 1; i > target ;i--) {
         offset += variable_size(buffer->local_symbol[i]);
     }
     return offset;
@@ -712,9 +714,8 @@ int add_local_symbol(T_NODE * up, T_BUFFER * buffer, char is_anon) {
 }
 
 void stack_parameters(T_NODE * up, T_BUFFER * buffer) {
-    puts("STACK parameter [");
-    display_elt(up->elt);
-    printf("]\n"); 
+    display_elt_ctxt("STACK parameter: ", up->elt);  
+
     if (up->elt == NULL || up->type == COM)
         return  stack_parameters(up->next, buffer);
 
@@ -744,16 +745,12 @@ void parameter_scan(T_NODE * up, T_BUFFER * buffer) {
 
 
 void alloc_variable(T_NODE * up, int stack_offset, T_NODE * oper,T_BUFFER * buffer) {
-    printf("ALLOC VARIABLE [");
-    display_elt(up->elt);
-    printf("]\n");     
+    display_elt_ctxt("ALLOC VARIABLE: ", up->elt);    
 
     if (up == NULL) error("INVALID VARIABLE ALLOC");
 
     if (is_procedure_body(up)) {
-        printf("BODY declaration for: ");
-        display_elt(up->elt);
-        printf("\n");
+        display_elt_ctxt("Body declaration: ", up->elt);
 
         buffer->local_symbol_count = 0;
 
@@ -773,9 +770,7 @@ void alloc_variable(T_NODE * up, int stack_offset, T_NODE * oper,T_BUFFER * buff
             alloc_variable(up->desc->next->next->desc, -1, NULL, buffer);
         //up = up->desc->next->next->desc;
     } else if (is_variable_decl(up)) {
-        printf("VARIABLE declaration for: ");
-        display_elt(up->elt);
-        printf("\n"); 
+        display_elt_ctxt("Variable declaration: ", up->elt);
 
         int doffset = add_local_symbol(up, buffer, 0);
     
@@ -800,9 +795,7 @@ void alloc_variable(T_NODE * up, int stack_offset, T_NODE * oper,T_BUFFER * buff
         asm_load_eax(v, buffer);
      
      } else if(is_procedure_call(up)){
-        printf("PROCEDURE call for: ");
-        display_elt(up->elt);
-        printf("\n"); 
+        display_elt_ctxt("Procedure call: ", up->elt);
 
         int offset = proc_lookup(buffer->top, up);
         if (offset == -1) error("No matching proc declaration.");
@@ -815,9 +808,7 @@ void alloc_variable(T_NODE * up, int stack_offset, T_NODE * oper,T_BUFFER * buff
         asm_call(buffer, offset - buffer->length);
 
     } else if (up->type == EXPR) {
-        printf("VARIABLE assign for: ");
-        display_elt(up->elt);
-        printf("\n");        
+        display_elt_ctxt("Variable assign: ", up->elt);
 
         asm_retrieve_variable(get_variable_offset(up, buffer), buffer);
 
