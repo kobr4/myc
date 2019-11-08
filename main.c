@@ -22,7 +22,9 @@ enum keyword {
     SUP,
     INF,
     RET,
-    EQEQ
+    EQEQ,
+    FOR,
+    ADDADD
 } T_KEYWORD;
 
 typedef struct T_CTXT {
@@ -237,6 +239,8 @@ enum keyword type(T_ELT * elt) {
     else if (elt->len == 4 && strncmp(elt->str, "else", elt->len) == 0) result = ELSE;
     else if (elt->len == 6 && strncmp(elt->str, "return", elt->len) == 0) result = RET;
     else if (elt->len == 2 && strncmp(elt->str, "==", elt->len) == 0) result = EQEQ;
+    else if (elt->len == 3 && strncmp(elt->str, "for", elt->len) == 0) result = FOR;
+    else if (elt->len == 2 && strncmp(elt->str, "++", elt->len) == 0) result = ADDADD;
     else if (strncmp(elt->str, "(", elt->len) == 0) result = PAR_O;
     else if (strncmp(elt->str, ")", elt->len) == 0) result = PAR_C;
     else if (strncmp(elt->str, "{", elt->len) == 0) result = ACC_O;
@@ -405,6 +409,7 @@ void create_node_expr(T_NODE * up, T_ELT * current, T_CTXT ctxt) {
         case EQEQ:
         case RET:
         case COM:
+        case FOR:
             ctxt.type = t_current;
             current_n = add_next_node(up, current, ctxt);
             create_node_expr(current_n, current->next, ctxt);      
@@ -612,11 +617,30 @@ void asm_jump_greater(T_BUFFER * buffer, U32 addr) {
     buffer->length += 4;
 }
 
+//jge addr
+void asm_jump_greater_eq(T_BUFFER * buffer, U32 addr) {
+    printf("[ASM][%x] jg %x\n",buffer->length, addr);
+    buffer->buffer[buffer->length++] = 0x0F;
+    buffer->buffer[buffer->length++] = 0x8D;
+    memcpy( &(buffer->buffer[buffer->length]), &addr , sizeof(addr));
+    buffer->length += 4;
+}
+
+
 //jl addr
-void asm_jump_less(T_BUFFER * buffer, U32 addr) {
+void asm_jump_less(T_BUFFER * buffer, int addr) {
     printf("[ASM][%x] jl %x\n",buffer->length, addr);
     buffer->buffer[buffer->length++] = 0x0F;
     buffer->buffer[buffer->length++] = 0x8C;
+    memcpy( &(buffer->buffer[buffer->length]), &addr , sizeof(addr));
+    buffer->length += 4;
+}
+
+//jle addr
+void asm_jump_less_eq(T_BUFFER * buffer, int addr) {
+    printf("[ASM][%x] jl %x\n",buffer->length, addr);
+    buffer->buffer[buffer->length++] = 0x0F;
+    buffer->buffer[buffer->length++] = 0x8E;
     memcpy( &(buffer->buffer[buffer->length]), &addr , sizeof(addr));
     buffer->length += 4;
 }
@@ -641,7 +665,7 @@ void asm_jump_not_equal(T_BUFFER * buffer, U32 addr) {
 
 
 //jmp addr
-void asm_jump(T_BUFFER * buffer, U32 addr) {
+void asm_jump(T_BUFFER * buffer, int addr) {
     printf("[ASM][%x] jmp %x\n",buffer->length, addr);
     buffer->buffer[buffer->length++] = 0xE9;
     memcpy( &(buffer->buffer[buffer->length]), &addr , sizeof(addr));
@@ -721,7 +745,7 @@ T_NODE * one(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
 T_NODE * line(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
     while (up != NULL && up->type != END && up->type != COM) {
         up = one(up, stack_offset, buffer);
-        if (up != NULL)
+        if (up != NULL && up->type != END) 
             up = up->next;
     }
     return up;
@@ -745,7 +769,7 @@ void stack_parameters(T_NODE * up, T_BUFFER * buffer) {
     if (up->elt != NULL) {
         int doffset = add_local_symbol(up, buffer, 1);
         
-        one(up, -1, buffer);
+        one(up, doffset, buffer);
         asm_store_variable(get_variable_dynamic_offset(doffset, buffer), buffer);
         if (up->next != NULL)
             line(up->next, doffset, buffer);
@@ -831,8 +855,15 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         return up;
     } else if (up->type == EXPR) {
         display_elt_ctxt("Variable assign: ", up->elt);
+        
+        T_NODE * last = up;
         asm_retrieve_variable(get_variable_offset(up, buffer), buffer);
-        return up;
+        if (stack_offset == -1) {
+            int doffset = get_variable_dynamic_offset_from_symbol(up, buffer);
+            
+            last = line(up->next, doffset, buffer);
+        } 
+        return last;
     } else if (up->type == SUP || up->type == INF || up->type == EQEQ) {
         
         puts("STORING TO EBX FOR COMP");
@@ -840,16 +871,16 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         T_NODE * end = line(up->next, -1, buffer);
         asm_cmp_eax_ebx(buffer);
         if (up-> type == INF)
-            asm_jump_less(buffer, 0);
+            asm_jump_less_eq(buffer, 0);
         else if (up->type == SUP)
-            asm_jump_greater(buffer, 0);
+            asm_jump_greater_eq(buffer, 0);
         else asm_jump_not_equal(buffer, 0); 
         return end;   
 
     } else if (up->type == RET) {
 
         int doffset = add_local_symbol(up, buffer, 1);
-        T_NODE * last = one(up->next, -1, buffer);
+        T_NODE * last = one(up->next, doffset, buffer);
         asm_store_variable(get_variable_dynamic_offset(doffset, buffer), buffer);
         if (last != NULL && last->next != NULL)
             last = line(last->next, doffset, buffer);
@@ -902,6 +933,29 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
 
         return up;
 
+    } else if (up->type == FOR) {
+        int s_count = buffer->local_symbol_count;
+
+        T_NODE * last = line(up->desc->desc->next, -1, buffer);
+        U32 offset = buffer->length;
+        last = line(last->next, -1, buffer);
+        U32 offset3 = buffer->length;
+        U8 * jcondptr = &(buffer->buffer[buffer->length - 4]);
+        block(up->desc->next->next->desc, -1, buffer);
+        line(last->next, -1, buffer);
+        asm_jump(buffer, 0);
+        U8 * jcondptr2 = &(buffer->buffer[buffer->length - 4]);
+        
+        int offset2 =  offset - buffer->length;
+        memcpy( jcondptr2, &offset2, sizeof(U32) );
+        offset3 = buffer->length - offset3;
+        memcpy( jcondptr, &offset3, sizeof(U32) );
+
+        
+        asm_remove_variable(buffer, get_variable_dynamic_offset((s_count == 0) ? s_count : s_count - 1, buffer));
+        buffer->local_symbol_count = s_count;
+        return up;
+        
     } else if (up->type == EQ) {
 
         T_NODE * last = one(up->next, stack_offset, buffer);
@@ -919,7 +973,14 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         asm_sub_variable_and_store(get_variable_dynamic_offset(stack_offset, buffer), buffer);
  
         return last;
-    } 
+    } else if (up->type == ADDADD) {
+        asm_load_eax(1, buffer);
+        asm_add_variable_and_store(get_variable_dynamic_offset(stack_offset, buffer), buffer);
+
+        return up;
+    }
+    
+    return up;
 }
 
 void display_node(T_NODE * node, int spacing) {

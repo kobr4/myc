@@ -7,7 +7,7 @@ echo "1: $SOURCE"
 
 ./main tests/$SOURCE > /dev/null
 $OUTBIN
-if [ $? = "95" ] 
+if [ $? = "96" ] 
 then
     echo "PASSED"
 else 
@@ -32,6 +32,18 @@ echo "3: $SOURCE"
 ./main tests/$SOURCE > /dev/null
 $OUTBIN
 if [ $? = "55" ] 
+then
+    echo "PASSED"
+else 
+    echo "FAILED"    
+fi
+
+SOURCE="sample3.c"
+echo "4: $SOURCE"
+
+./main tests/$SOURCE > /dev/null
+$OUTBIN
+if [ $? = "6" ] 
 then
     echo "PASSED"
 else 
