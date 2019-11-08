@@ -5,6 +5,7 @@
 enum keyword {
     VOID,
     INT,
+    SHORT,
     CHAR,
     PAR_C,
     PAR_O,
@@ -24,7 +25,8 @@ enum keyword {
     RET,
     EQEQ,
     FOR,
-    ADDADD
+    ADDADD,
+    SUBSUB
 } T_KEYWORD;
 
 typedef struct T_CTXT {
@@ -235,12 +237,14 @@ enum keyword type(T_ELT * elt) {
     if (elt->len == 4 && strncmp(elt->str, "void", elt->len) == 0) result = VOID;
     else if (elt->len == 3 && strncmp(elt->str, "int", elt->len) == 0) result = INT;
     else if (elt->len == 4 && strncmp(elt->str, "char", elt->len) == 0) result = CHAR;
+    else if (elt->len == 5 && strncmp(elt->str, "short", elt->len) == 0) result = SHORT;
     else if (elt->len == 2 && strncmp(elt->str, "if", elt->len) == 0) result = IF;
     else if (elt->len == 4 && strncmp(elt->str, "else", elt->len) == 0) result = ELSE;
     else if (elt->len == 6 && strncmp(elt->str, "return", elt->len) == 0) result = RET;
     else if (elt->len == 2 && strncmp(elt->str, "==", elt->len) == 0) result = EQEQ;
     else if (elt->len == 3 && strncmp(elt->str, "for", elt->len) == 0) result = FOR;
     else if (elt->len == 2 && strncmp(elt->str, "++", elt->len) == 0) result = ADDADD;
+    else if (elt->len == 2 && strncmp(elt->str, "--", elt->len) == 0) result = SUBSUB;
     else if (strncmp(elt->str, "(", elt->len) == 0) result = PAR_O;
     else if (strncmp(elt->str, ")", elt->len) == 0) result = PAR_C;
     else if (strncmp(elt->str, "{", elt->len) == 0) result = ACC_O;
@@ -359,9 +363,25 @@ T_ELT * tokenize(char * input,int size) {
                 }            
                 current = add_token(current, &input[c], 1);
                 break;
+            case '-':
+            case '+':
+            case '=':
+                if (current_exp == -1) {
+                    current_exp = c;
+                } else if (input[c-1] == elt)  {
+                    current = add_token(current, &input[current_exp], c-current_exp + 1);
+                    current_exp = -1;                     
+                } else {
+                    current = add_token(current, &input[current_exp], c-current_exp);
+                    current_exp = c;                     
+                }
+                break;
             default:
                 if (current_exp == -1) {
                     current_exp = c;
+                } else if (input[c-1] == '=' || input[c-1] == '+' || input[c-1] == '-')  {
+                    current = add_token(current, &input[current_exp], c-current_exp);
+                    current_exp = c;                     
                 }
                 break;
         }
@@ -391,6 +411,7 @@ void create_node_expr(T_NODE * up, T_ELT * current, T_CTXT ctxt) {
         case VOID:
         case INT:
         case CHAR:
+        case SHORT:
             ctxt.type = t_current;
             create_node_expr(up, current->next, ctxt);
             break;
@@ -410,6 +431,8 @@ void create_node_expr(T_NODE * up, T_ELT * current, T_CTXT ctxt) {
         case RET:
         case COM:
         case FOR:
+        case ADDADD:
+        case SUBSUB:
             ctxt.type = t_current;
             current_n = add_next_node(up, current, ctxt);
             create_node_expr(current_n, current->next, ctxt);      
@@ -438,6 +461,7 @@ int is_type(enum keyword k) {
         case VOID:
         case INT:
         case CHAR:
+        case SHORT:
             return 1;
             break;
         default :
@@ -504,6 +528,9 @@ int variable_size(T_NODE * up) {
         case INT: 
             return 4;
             break;
+        case SHORT: 
+            return 2;
+            break;            
         case CHAR:
             return 1;
             break;
@@ -976,9 +1003,13 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
     } else if (up->type == ADDADD) {
         asm_load_eax(1, buffer);
         asm_add_variable_and_store(get_variable_dynamic_offset(stack_offset, buffer), buffer);
-
+        return up;
+    } else if (up->type == SUBSUB) {
+        asm_load_eax(1, buffer);
+        asm_sub_variable_and_store(get_variable_dynamic_offset(stack_offset, buffer), buffer);
         return up;
     }
+
     
     return up;
 }

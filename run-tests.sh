@@ -43,7 +43,7 @@ echo "4: $SOURCE"
 
 ./main tests/$SOURCE > /dev/null
 $OUTBIN
-if [ $? = "6" ] 
+if [ $? = "7" ] 
 then
     echo "PASSED"
 else 
