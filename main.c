@@ -512,17 +512,8 @@ int is_procedure_call(T_NODE * up) {
     return 0;
 }
 
-int is_variable_decl(T_NODE * up) {
-    if ((up->type == EXPR) && is_type(up->ctxt.type)) {
-        return 1;
-    }
-    return 0;
-}
-
 int variable_size(T_NODE * up) {
-    if (is_number(up->elt)) {
-        return 4;
-    }
+
 
     switch (up->ctxt.type) {
         case INT: 
@@ -535,11 +526,14 @@ int variable_size(T_NODE * up) {
             return 1;
             break;
         default:
+            if (is_number(up->elt)) {
+                return 4;
+            }
             display_elt_ctxt("Error on variable size: ", up->elt);    
             printf("TYPE: %d %d\n", up->ctxt.type, INT);      
-            return 4;
-            //exit(0);
-            //return 0;
+            //return 4;
+            exit(0);
+            return 0;
 
     }
 }
@@ -735,19 +729,26 @@ int get_all_variable_offset(T_BUFFER * buffer) {
     return offset;
 }
 
+int is_variable_decl(T_NODE * up, T_BUFFER * buffer) {
+    if ((up->type == EXPR) && is_type(up->ctxt.type) && !is_number(up->elt) && get_variable_dynamic_offset_from_symbol(up, buffer) == - 1) {
+        return 1;
+    }
+    return 0;
+}
+
 T_NODE * skip(T_NODE * up) {
     if (up == NULL || up->type == END)
         return up;
     else return skip(up->next);
 }
 
-int proc_lookup(T_NODE * up, T_NODE * target) {
+T_NODE * proc_lookup(T_NODE * up, T_NODE * target) {
     if (up == NULL) {
-        return -1;
+        return NULL;
     }
 
     if (is_procedure_body(up) && is_matching(up, target)) {
-        return up->offset;
+        return up;
     } else {
         return proc_lookup(up->next, target);
     }
@@ -787,13 +788,37 @@ T_NODE * block(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
     return up;
 }
 
-void stack_parameters(T_NODE * up, T_BUFFER * buffer) {
+T_NODE * calling_proc(T_NODE * up) {
+    T_NODE * n = up->asc;
+    while (!is_procedure_body(n) ) {
+        n = n->asc;
+        if (n == NULL) return NULL;
+    }
+    return n;
+}
+
+T_NODE * prog_arg(T_NODE * proc, int c) {
+    T_NODE * arg = proc->desc->desc;
+    int count = 0;
+    if (arg->elt == NULL) arg = arg->next;
+    while (c < count && arg != NULL) {
+        arg = arg->next;
+        count++;
+    }
+    return arg;
+}
+
+void stack_parameters(T_NODE * up, T_BUFFER * buffer, T_NODE * proc, int count) {
     if (up->elt == NULL || up->type == COM)
-        return  stack_parameters(up->next, buffer);
+        return  stack_parameters(up->next, buffer, proc, count);
 
     display_elt_ctxt("STACK parameter: ", up->elt);  
 
     if (up->elt != NULL) {
+        T_NODE * n = prog_arg(proc, count);
+        up->ctxt.type = n->ctxt.type;
+        
+
         int doffset = add_local_symbol(up, buffer, 1);
         
         one(up, doffset, buffer);
@@ -801,20 +826,18 @@ void stack_parameters(T_NODE * up, T_BUFFER * buffer) {
         if (up->next != NULL)
             line(up->next, doffset, buffer);
         
-        //dodgy !
-        //offset = variable_size(up);
         while(up != NULL && up->type != PAR_C && up->type != COM) up = up->next;
     }
     
     if (up != NULL) {
-        stack_parameters(up, buffer);
+        stack_parameters(up, buffer, proc, count + 1);
     } 
 }
 
 void parameter_scan(T_NODE * up, T_BUFFER * buffer) {
     if (up == NULL)
         return;
-    else if (is_variable_decl(up)) {
+    else if (is_variable_decl(up, buffer)) {
         buffer->local_symbol[buffer->local_symbol_count++] = up;
     }
     parameter_scan(up->next, buffer);
@@ -845,7 +868,7 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         buffer->local_symbol[buffer->local_symbol_count++] = &dummy; // Symbol for return adress of the call
 
         return block(up->desc->next->next->desc, -1, buffer);
-    } else if (is_variable_decl(up)) {
+    } else if (is_variable_decl(up, buffer)) {
         display_elt_ctxt("Variable declaration: ", up->elt);
 
         int doffset = add_local_symbol(up, buffer, 0);  
@@ -869,11 +892,12 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
      } else if(is_procedure_call(up)){
         display_elt_ctxt("Procedure call: ", up->elt);
 
-        int offset = proc_lookup(buffer->top, up);
+        T_NODE * proc = proc_lookup(buffer->top, up);
+        int offset = proc->offset;
         if (offset == -1) error("No matching proc declaration.");
 
         if (up->desc != NULL && up->desc->type == PAR_O)
-            stack_parameters(up->desc->desc, buffer);
+            stack_parameters(up->desc->desc, buffer, proc, 0);
         else 
             error("Invalid procedure call");
 
@@ -905,6 +929,8 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         return end;   
 
     } else if (up->type == RET) {
+        T_NODE * n = calling_proc(up);
+        up->ctxt.type = n->ctxt.type;
 
         int doffset = add_local_symbol(up, buffer, 1);
         T_NODE * last = one(up->next, doffset, buffer);
