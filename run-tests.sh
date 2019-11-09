@@ -49,3 +49,27 @@ then
 else 
     echo "FAILED"    
 fi
+
+SOURCE="sample4.c"
+echo "4: $SOURCE"
+
+./main tests/$SOURCE > /dev/null
+$OUTBIN
+if [ $? = "3" ] 
+then
+    echo "PASSED"
+else 
+    echo "FAILED"    
+fi
+
+SOURCE="sample5.c"
+echo "5: $SOURCE"
+
+./main tests/$SOURCE > /dev/null
+$OUTBIN
+if [ $? = "3" ] 
+then
+    echo "PASSED"
+else 
+    echo "FAILED"    
+fi

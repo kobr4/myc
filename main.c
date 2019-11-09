@@ -179,8 +179,10 @@ U8 prog[] = {
 
 T_NODE dummy;
 
- T_ELT elt_int;
+T_ELT elt_int;
 T_NODE anonymous_int;
+T_NODE anonymous_short;
+T_NODE anonymous_char;
 
 T_ELF_PRG32_HDR elf32_prg_hdr = {
     PT_LOAD,
@@ -546,6 +548,23 @@ void asm_load_eax(U32 value, T_BUFFER * buffer) {
     buffer->length += 4;
 } 
 
+// mov AX, value
+void asm_load_ax(U16 value, T_BUFFER * buffer) {
+    printf("[ASM][%x] mov ax,  %d\n", buffer->length, value);
+    buffer->buffer[buffer->length++] = 0x66;
+    buffer->buffer[buffer->length++] = 0xB8; 
+    memcpy( &(buffer->buffer[buffer->length]), &value , sizeof(value));
+    buffer->length += 2;
+} 
+
+// mov AL, value
+void asm_load_al(U8 value, T_BUFFER * buffer) {
+    printf("[ASM][%x] mov ax,  %d\n", buffer->length, value);
+    buffer->buffer[buffer->length++] = 0xB0; 
+    buffer->buffer[buffer->length++] = value;
+} 
+
+
 //sub esp, size
 void asm_add_variable(T_NODE * up, T_BUFFER * buffer) {
     U8 size  = variable_size(up);
@@ -556,16 +575,54 @@ void asm_add_variable(T_NODE * up, T_BUFFER * buffer) {
 }
 
 // mov eax, DWORD PTR SS:[esp]
-void asm_retrieve_variable(int offset, T_BUFFER * buffer) {
-    printf("[ASM][%x] mov eax, DWORD PTR SS:[esp + %d]\n", buffer->length, offset);
+void asm_retrieve_variable_nested(int offset, T_BUFFER * buffer) {
     buffer->buffer[buffer->length++] = 0x8B;
     buffer->buffer[buffer->length++] = 0x44; 
     buffer->buffer[buffer->length++] = 0x24;
     buffer->buffer[buffer->length++] = offset; 
 }
 
-//add DWORD PTR SS:[esp], eax
-void asm_add_variable_and_store(int offset, T_BUFFER * buffer) {
+// mov ax, DWORD PTR SS:[esp]
+void asm_retrieve_variable_ax(int offset, T_BUFFER * buffer) {
+    printf("[ASM][%x] mov ax, WORD PTR SS:[esp + %d]\n", buffer->length, offset);
+    buffer->buffer[buffer->length++] = 0x66;
+    asm_retrieve_variable_nested(offset, buffer);
+}
+
+// mov eax, DWORD PTR SS:[esp]
+void asm_retrieve_variable_eax(int offset, T_BUFFER * buffer) {
+    printf("[ASM][%x] mov eax, DWORD PTR SS:[esp + %d]\n", buffer->length, offset);
+    asm_retrieve_variable_nested(offset, buffer);
+}
+
+// mov al, BYTE PTR SS:[esp]
+void asm_retrieve_variable_al(int offset, T_BUFFER * buffer) {
+    printf("[ASM][%x] mov al, BYTE PTR SS:[esp + %d]\n", buffer->length, offset);
+    buffer->buffer[buffer->length++] = 0x8A;
+    buffer->buffer[buffer->length++] = 0x44; 
+    buffer->buffer[buffer->length++] = 0x24;
+    buffer->buffer[buffer->length++] = offset; 
+}
+
+void asm_retrieve_variable(T_NODE * n, int offset, T_BUFFER * buffer) {
+    switch(variable_size(n)) {
+        case 1:
+            asm_retrieve_variable_al(offset, buffer);
+            break;
+        case 2:
+            asm_retrieve_variable_ax(offset, buffer);
+            break;
+        case 4: 
+            asm_retrieve_variable_eax(offset, buffer);
+            break;
+        default:
+            error("Unsupported variable size");
+            break;
+    }
+}
+
+
+void asm_add_variable_and_store_nested(int offset, T_BUFFER * buffer) {
     printf("[ASM][%x] add DWORD PTR SS:[esp + %d], eax\n", buffer->length, offset);
     buffer->buffer[buffer->length++] = 0x01;
     buffer->buffer[buffer->length++] = 0x44;
@@ -573,24 +630,138 @@ void asm_add_variable_and_store(int offset, T_BUFFER * buffer) {
     buffer->buffer[buffer->length++] = offset;
 }
 
+//add WORD PTR SS:[esp], ax
+void asm_add_variable_and_store_ax(int offset, T_BUFFER * buffer) {
+    printf("[ASM][%x] add WORD PTR SS:[esp + %d], ax\n", buffer->length, offset);
+    buffer->buffer[buffer->length++] = 0x66;
+    asm_add_variable_and_store_nested(offset, buffer);
+}
+
+//add DWORD PTR SS:[esp], eax
+void asm_add_variable_and_store_eax(int offset, T_BUFFER * buffer) {
+    printf("[ASM][%x] add DWORD PTR SS:[esp + %d], eax\n", buffer->length, offset);
+    asm_add_variable_and_store_nested(offset, buffer);
+}
+
+//add BYTE PTR SS:[esp], al
+void asm_add_variable_and_store_al(int offset, T_BUFFER * buffer) {
+    printf("[ASM][%x] add BYTE PTR SS:[esp + %d], al\n", buffer->length, offset);
+    buffer->buffer[buffer->length++] = 0x00;
+    buffer->buffer[buffer->length++] = 0x44;
+    buffer->buffer[buffer->length++] = 0x24;
+    buffer->buffer[buffer->length++] = offset;
+}
+
+void asm_add_variable_and_store(T_NODE * n, int offset, T_BUFFER * buffer) {
+    switch(variable_size(n)) {
+        case 1:
+            asm_add_variable_and_store_al(offset, buffer);
+            break;
+        case 2:
+            asm_add_variable_and_store_ax(offset, buffer);
+            break;
+        case 4: 
+            asm_add_variable_and_store_eax(offset, buffer);
+            break;
+        default:
+            error("Unsupported variable size");
+            break;
+    }
+}
+
+
 //sub DWORD PTR SS:[esp], eax
-void asm_sub_variable_and_store(int offset, T_BUFFER * buffer) {
-    printf("[ASM][%x] sub DWORD PTR SS:[esp + %d], eax\n", buffer->length, offset);
+void asm_sub_variable_and_store_nested(int offset, T_BUFFER * buffer) {
     buffer->buffer[buffer->length++] = 0x29;
     buffer->buffer[buffer->length++] = 0x44;
     buffer->buffer[buffer->length++] = 0x24;
     buffer->buffer[buffer->length++] = offset;
 }
 
+//sub WORD PTR SS:[esp], eax
+void asm_sub_variable_and_store_eax(int offset, T_BUFFER * buffer) {
+    printf("[ASM][%x] sub DWORD PTR SS:[esp + %d], eax\n", buffer->length, offset);
+    asm_sub_variable_and_store_nested(offset, buffer);
+}
+
+//sub WORD PTR SS:[esp], ax
+void asm_sub_variable_and_store_ax(int offset, T_BUFFER * buffer) {
+    printf("[ASM][%x] sub WORD PTR SS:[esp + %d], ax\n", buffer->length, offset);
+    buffer->buffer[buffer->length++] = 0x66;
+    asm_sub_variable_and_store_nested(offset, buffer);
+}
+
+//sub BYTE PTR SS:[esp], al
+void asm_sub_variable_and_store_al(int offset, T_BUFFER * buffer) {
+    printf("[ASM][%x] sub BYTE PTR SS:[esp + %d], al\n", buffer->length, offset);
+    buffer->buffer[buffer->length++] = 0x28;
+    buffer->buffer[buffer->length++] = 0x44;
+    buffer->buffer[buffer->length++] = 0x24;
+    buffer->buffer[buffer->length++] = offset;
+}
+
+void asm_sub_variable_and_store(T_NODE * n, int offset, T_BUFFER * buffer) {
+    switch(variable_size(n)) {
+        case 1:
+            asm_sub_variable_and_store_al(offset, buffer);
+            break;
+        case 2:
+            asm_sub_variable_and_store_ax(offset, buffer);
+            break;
+        case 4: 
+            asm_sub_variable_and_store_eax(offset, buffer);
+            break;
+        default:
+            error("Unsupported variable size");
+            break;
+    }
+}
+
+//mov WORD PTR SS:[esp], al
+void asm_store_variable_al(int offset, T_BUFFER * buffer) {
+    printf("[ASM][%x] mov BYTE PTR SS:[esp + %d], al\n", buffer->length, offset);
+    buffer->buffer[buffer->length++] = 0x88;
+    buffer->buffer[buffer->length++] = 0x44; 
+    buffer->buffer[buffer->length++] = 0x24;
+    buffer->buffer[buffer->length++] = offset;
+}
+
 //mov DWORD PTR SS:[esp], eax
-void asm_store_variable(int offset, T_BUFFER * buffer) {
-    
+void asm_store_variable_ax(int offset, T_BUFFER * buffer) {
+    printf("[ASM][%x] mov DWORD PTR SS:[esp + %d], ax\n", buffer->length, offset);
+    buffer->buffer[buffer->length++] = 0x66;
+    buffer->buffer[buffer->length++] = 0x89;
+    buffer->buffer[buffer->length++] = 0x44; 
+    buffer->buffer[buffer->length++] = 0x24;
+    buffer->buffer[buffer->length++] = offset;
+}
+
+//mov DWORD PTR SS:[esp], eax
+void asm_store_variable_eax(int offset, T_BUFFER * buffer) {
     printf("[ASM][%x] mov DWORD PTR SS:[esp + %d], eax\n", buffer->length, offset);
     buffer->buffer[buffer->length++] = 0x89;
     buffer->buffer[buffer->length++] = 0x44; 
     buffer->buffer[buffer->length++] = 0x24;
     buffer->buffer[buffer->length++] = offset;
 }
+
+void asm_store_variable(T_NODE * n, int offset, T_BUFFER * buffer) {
+    switch(variable_size(n)) {
+        case 1:
+            asm_store_variable_al(offset, buffer);
+            break;
+        case 2:
+            asm_store_variable_ax(offset, buffer);
+            break;
+        case 4: 
+            asm_store_variable_eax(offset, buffer);
+            break;
+        default:
+            error("Unsupported variable size");
+            break;
+    }
+}
+
 
 //add esp, size
 void asm_remove_variable(T_BUFFER * buffer, U8 size) {
@@ -759,9 +930,22 @@ int add_local_symbol(T_NODE * up, T_BUFFER * buffer, char is_anon) {
     asm_add_variable(up, buffer);
     if (!is_anon)
         buffer->local_symbol[buffer->local_symbol_count++] = up;
-    else
-        buffer->local_symbol[buffer->local_symbol_count++] = &anonymous_int;
-
+    else {
+        switch (variable_size(up)) {
+            case 1: 
+                buffer->local_symbol[buffer->local_symbol_count++] = &anonymous_char;
+                break;
+            case 2:
+                buffer->local_symbol[buffer->local_symbol_count++] = &anonymous_short;
+                break;
+            case 4:
+                buffer->local_symbol[buffer->local_symbol_count++] = &anonymous_int;
+                break;
+            default:
+                break;
+        }
+        
+    }
     return buffer->local_symbol_count - 1;
 }
 
@@ -822,7 +1006,7 @@ void stack_parameters(T_NODE * up, T_BUFFER * buffer, T_NODE * proc, int count) 
         int doffset = add_local_symbol(up, buffer, 1);
         
         one(up, doffset, buffer);
-        asm_store_variable(get_variable_dynamic_offset(doffset, buffer), buffer);
+        asm_store_variable(n, get_variable_dynamic_offset(doffset, buffer), buffer);
         if (up->next != NULL)
             line(up->next, doffset, buffer);
         
@@ -908,10 +1092,9 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         display_elt_ctxt("Variable assign: ", up->elt);
         
         T_NODE * last = up;
-        asm_retrieve_variable(get_variable_offset(up, buffer), buffer);
+        int doffset = get_variable_dynamic_offset_from_symbol(up, buffer);
+        asm_retrieve_variable(buffer->local_symbol[doffset], get_variable_offset(up, buffer), buffer);
         if (stack_offset == -1) {
-            int doffset = get_variable_dynamic_offset_from_symbol(up, buffer);
-            
             last = line(up->next, doffset, buffer);
         } 
         return last;
@@ -934,11 +1117,11 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
 
         int doffset = add_local_symbol(up, buffer, 1);
         T_NODE * last = one(up->next, doffset, buffer);
-        asm_store_variable(get_variable_dynamic_offset(doffset, buffer), buffer);
+        asm_store_variable(n, get_variable_dynamic_offset(doffset, buffer), buffer);
         if (last != NULL && last->next != NULL)
             last = line(last->next, doffset, buffer);
 
-        asm_retrieve_variable( get_variable_dynamic_offset(doffset, buffer), buffer);
+        asm_retrieve_variable(buffer->local_symbol[doffset], get_variable_dynamic_offset(doffset, buffer), buffer);
         asm_remove_variable(buffer, get_all_variable_offset(buffer));
         asm_ret(buffer);      
         return last;
@@ -1012,27 +1195,26 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
     } else if (up->type == EQ) {
 
         T_NODE * last = one(up->next, stack_offset, buffer);
-        asm_store_variable(get_variable_dynamic_offset(stack_offset, buffer), buffer);
+        asm_store_variable(buffer->local_symbol[stack_offset], get_variable_dynamic_offset(stack_offset, buffer), buffer);
         return last;
         
     } else if (up->type == ADD) {
         T_NODE * last = one(up->next, stack_offset, buffer);
-        asm_add_variable_and_store(get_variable_dynamic_offset(stack_offset, buffer), buffer);
- 
+        asm_add_variable_and_store(buffer->local_symbol[stack_offset], get_variable_dynamic_offset(stack_offset, buffer), buffer);
         return last;
 
     } else if (up->type == SUB) {
         T_NODE * last = one(up->next, stack_offset, buffer);
-        asm_sub_variable_and_store(get_variable_dynamic_offset(stack_offset, buffer), buffer);
+        asm_sub_variable_and_store(buffer->local_symbol[stack_offset], get_variable_dynamic_offset(stack_offset, buffer), buffer);
  
         return last;
     } else if (up->type == ADDADD) {
         asm_load_eax(1, buffer);
-        asm_add_variable_and_store(get_variable_dynamic_offset(stack_offset, buffer), buffer);
+        asm_add_variable_and_store(buffer->local_symbol[stack_offset], get_variable_dynamic_offset(stack_offset, buffer), buffer);
         return up;
     } else if (up->type == SUBSUB) {
         asm_load_eax(1, buffer);
-        asm_sub_variable_and_store(get_variable_dynamic_offset(stack_offset, buffer), buffer);
+        asm_sub_variable_and_store(buffer->local_symbol[stack_offset], get_variable_dynamic_offset(stack_offset, buffer), buffer);
         return up;
     }
 
@@ -1097,6 +1279,12 @@ void main(int c, char** argv) {
     elt_int.len = strlen(elt_int.str);
     anonymous_int.elt = &elt_int;
     anonymous_int.ctxt.type = INT;
+
+    anonymous_short.elt = &elt_int;
+    anonymous_short.ctxt.type = SHORT;
+
+    anonymous_char.elt = &elt_int;
+    anonymous_char.ctxt.type = CHAR;
 
     printf("Reading file %s\n",argv[1]);
     int size;
