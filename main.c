@@ -26,7 +26,9 @@ enum keyword {
     EQEQ,
     FOR,
     ADDADD,
-    SUBSUB
+    SUBSUB,
+    WHILE,
+    DO
 } T_KEYWORD;
 
 typedef struct T_CTXT {
@@ -247,6 +249,8 @@ enum keyword type(T_ELT * elt) {
     else if (elt->len == 3 && strncmp(elt->str, "for", elt->len) == 0) result = FOR;
     else if (elt->len == 2 && strncmp(elt->str, "++", elt->len) == 0) result = ADDADD;
     else if (elt->len == 2 && strncmp(elt->str, "--", elt->len) == 0) result = SUBSUB;
+    else if (elt->len == 2 && strncmp(elt->str, "do", elt->len) == 0) result = DO;
+    else if (elt->len == 5 && strncmp(elt->str, "while", elt->len) == 0) result = WHILE;
     else if (strncmp(elt->str, "(", elt->len) == 0) result = PAR_O;
     else if (strncmp(elt->str, ")", elt->len) == 0) result = PAR_C;
     else if (strncmp(elt->str, "{", elt->len) == 0) result = ACC_O;
@@ -435,6 +439,8 @@ void create_node_expr(T_NODE * up, T_ELT * current, T_CTXT ctxt) {
         case FOR:
         case ADDADD:
         case SUBSUB:
+        case WHILE:
+        case DO:
             ctxt.type = t_current;
             current_n = add_next_node(up, current, ctxt);
             create_node_expr(current_n, current->next, ctxt);      
@@ -1192,6 +1198,47 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         buffer->local_symbol_count = s_count;
         return up;
         
+    } else if (up->type == WHILE) {
+
+        int s_count = buffer->local_symbol_count;
+
+        U32 offset = buffer->length;
+        T_NODE * last = line(up->desc->desc->next, -1, buffer);
+        U32 offset3 = buffer->length;
+        U8 * jcondptr = &(buffer->buffer[buffer->length - 4]);
+        block(up->desc->next->next->desc, -1, buffer);
+        asm_jump(buffer, 0);
+        U8 * jcondptr2 = &(buffer->buffer[buffer->length - 4]);
+        
+        int offset2 =  offset - buffer->length;
+        memcpy( jcondptr2, &offset2, sizeof(U32) );
+        offset3 = buffer->length - offset3;
+        memcpy( jcondptr, &offset3, sizeof(U32) );
+
+        
+        asm_remove_variable(buffer, get_variable_dynamic_offset((s_count == 0) ? s_count : s_count - 1, buffer));
+        buffer->local_symbol_count = s_count;
+    
+    } else if (up->type == DO) {;
+        int s_count = buffer->local_symbol_count;
+
+        U32 offset = buffer->length;
+        block(up->desc->desc->next, -1, buffer);
+
+        if (up->next != NULL && up->next->type == WHILE && up->next->desc->desc->next != NULL ) {
+            line(up->next->desc->desc->next, -1, buffer);
+        } else error("Error after DO");
+        
+        U8 * jcondptr2 = &(buffer->buffer[buffer->length - 4]);
+        int offset3 = buffer->length;
+        asm_jump(buffer, offset - buffer->length - 5);
+        
+        int offset2 =  buffer->length - offset3;
+        memcpy( jcondptr2, &offset2, sizeof(U32) );
+        
+        asm_remove_variable(buffer, get_variable_dynamic_offset((s_count == 0) ? s_count : s_count - 1, buffer));
+        buffer->local_symbol_count = s_count;
+        return up->next;
     } else if (up->type == EQ) {
 
         T_NODE * last = one(up->next, stack_offset, buffer);
