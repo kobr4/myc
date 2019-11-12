@@ -36,6 +36,7 @@ typedef struct T_CTXT {
 } T_CTXT;
 
 typedef struct T_ELT {
+    int line;
     char * str;
     int len;
     struct T_ELT * next;
@@ -49,7 +50,6 @@ typedef struct T_NODE {
     T_CTXT ctxt;
     struct T_NODE * asc;
     int offset;
-    void * instr;
 } T_NODE;
 
 
@@ -207,6 +207,8 @@ void error(char * msg) {
     exit(0);
 }
 
+
+
 void display_all_elt(T_ELT * current) {    
     do {
         for (int i = 0;i < current->len;i++) {
@@ -222,6 +224,14 @@ void display_elt(T_ELT * current) {
     for (int i = 0;i < current->len;i++) {
         putchar(current->str[i]);
     }
+}
+
+void error_elt(T_ELT * elt, char * msg) {
+    printf("Error at line %d near ", elt->line);
+    display_elt(elt);
+    printf(". ");
+    puts(msg);
+    exit(0);
 }
 
 void display_elt_ctxt(char * msg, T_ELT * elt) {
@@ -290,12 +300,46 @@ T_NODE * successor(T_NODE * node) {
     else return node->desc;
 }
 
+#define NEXT 1
+#define DESC 2
 
-T_ELT * add_token(T_ELT * current, char * p, int len) {
+T_NODE * get_token(T_NODE * up, char successor) {
+    switch (successor) {
+        case NEXT:
+            if (up->next == NULL) error_elt(up->elt, "");
+            else return up->next;
+            break;
+        case DESC:
+            if (up->desc == NULL) error_elt(up->elt, "");
+            else return up->desc;
+            break;        
+    }
+    return NULL;
+}
+
+T_NODE * get_token_2(T_NODE * up, char a, char b) {
+    return get_token(get_token(up, a), b);
+}
+
+T_NODE * get_token_3(T_NODE * up, char a, char b, char c) {
+    return get_token(get_token(get_token(up, a), b), c);
+}
+
+T_NODE * get_token_4(T_NODE * up, char a, char b, char c, char d) {
+    return get_token(get_token(get_token(get_token(up, a), b), c), d);
+}
+
+T_NODE * get_token_5(T_NODE * up, char a, char b, char c, char d, char e) {
+    return get_token(get_token_4(up, a, b, c, d), e);
+}
+
+
+T_ELT * add_token(T_ELT * current, char * p, int len, int line) {
     T_ELT * new_c = (T_ELT *)malloc(sizeof(T_ELT));
     new_c->str = p;
     new_c->len = len;
     new_c->next = NULL;
+    new_c->line = line;
     if (current != NULL) {
         current->next = new_c;
     }
@@ -346,9 +390,11 @@ T_NODE * add_next_node(T_NODE * node, T_ELT * elt, T_CTXT ctxt) {
 T_ELT * tokenize(char * input,int size) {
     T_ELT * head = NULL;
     T_ELT * current = NULL;
-
+    int line = 0;
     int current_exp = -1;
     for(int c = 0;c < size; c++) {
+        if (input[c] == '\n') line++;
+
         if (input[c] == ' ' || input[c] == '\n') {
             input[c] = 0;
         }
@@ -357,7 +403,7 @@ T_ELT * tokenize(char * input,int size) {
         switch (elt) {
             case 0:
                 if (current_exp != -1) {
-                    current = add_token(current, &input[current_exp], c-current_exp);
+                    current = add_token(current, &input[current_exp], c-current_exp, line);
                     current_exp = -1;
                 }
                 break; 
@@ -369,10 +415,10 @@ T_ELT * tokenize(char * input,int size) {
             case '*':
             case ';':
                 if (current_exp != -1) {
-                    current = add_token(current, &input[current_exp], c-current_exp);
+                    current = add_token(current, &input[current_exp], c-current_exp, line);
                     current_exp = -1;
                 }            
-                current = add_token(current, &input[c], 1);
+                current = add_token(current, &input[c], 1, line);
                 break;
             case '-':
             case '+':
@@ -380,10 +426,10 @@ T_ELT * tokenize(char * input,int size) {
                 if (current_exp == -1) {
                     current_exp = c;
                 } else if (input[c-1] == elt)  {
-                    current = add_token(current, &input[current_exp], c-current_exp + 1);
+                    current = add_token(current, &input[current_exp], c-current_exp + 1, line);
                     current_exp = -1;                     
                 } else {
-                    current = add_token(current, &input[current_exp], c-current_exp);
+                    current = add_token(current, &input[current_exp], c-current_exp, line);
                     current_exp = c;                     
                 }
                 break;
@@ -391,7 +437,7 @@ T_ELT * tokenize(char * input,int size) {
                 if (current_exp == -1) {
                     current_exp = c;
                 } else if (input[c-1] == '=' || input[c-1] == '+' || input[c-1] == '-')  {
-                    current = add_token(current, &input[current_exp], c-current_exp);
+                    current = add_token(current, &input[current_exp], c-current_exp, line);
                     current_exp = c;                     
                 }
                 break;
@@ -1069,6 +1115,13 @@ int add_local_symbol(T_NODE * up, T_BUFFER * buffer, char is_anon) {
     return buffer->local_symbol_count - 1;
 }
 
+void unstack_local_symbol(T_BUFFER * buffer) {
+    if (buffer->local_symbol_count > 0) {
+        asm_remove_variable(buffer, variable_size(buffer->local_symbol[buffer->local_symbol_count - 1]));
+    }
+    buffer->local_symbol_count--;
+}
+
 int add_global_symbol(T_NODE * up, T_BUFFER * buffer) {
     buffer->global_symbol[buffer->global_symbol_count++] = up;
     up->offset = buffer->length;
@@ -1091,11 +1144,15 @@ T_NODE * line(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
 }
 
 T_NODE * block(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
+    int s_count = buffer->local_symbol_count;
     while (up != NULL) {
         up = line(up, stack_offset, buffer);
         if (up != NULL)
             up = up->next;
     }
+    
+    asm_remove_variable(buffer, get_variable_dynamic_offset((s_count == 0) ? s_count : s_count - 1, buffer));
+    buffer->local_symbol_count = s_count;
     return up;
 }
 
@@ -1161,30 +1218,10 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
 
     if (up == NULL) error("INVALID STEP");
 
-    if (is_procedure_body(up)) {
-        display_elt_ctxt("Body declaration: ", up->elt);
-
-        buffer->local_symbol_count = 0;
-
-        if (is_main(up->elt)) {
-            buffer->main_offset = buffer->length;
-        }
-        up->offset = buffer->length;
-
-        if (up->desc != NULL) {
-            parameter_scan(up->desc->desc, buffer);
-        }
-
-        printf("LOCAL SYMBOL IN SIGNATURE: %d\n", buffer->local_symbol_count);
-        buffer->local_symbol[buffer->local_symbol_count++] = &dummy; // Symbol for return adress of the call
-
-        return block(up->desc->next->next->desc, -1, buffer);
-    } else if (is_variable_decl(up, buffer)) {
+    if (is_variable_decl(up, buffer)) {
         display_elt_ctxt("Variable declaration: ", up->elt);
 
-        int doffset = add_local_symbol(up, buffer, 0);  
-
-        return line(up->next, doffset, buffer);
+        return line(up->next, add_local_symbol(up, buffer, 0), buffer);
     } else if (is_number(up->elt)) {
         
         T_ELT * elt = up->elt; 
@@ -1204,11 +1241,12 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         display_elt_ctxt("Procedure call: ", up->elt);
 
         T_NODE * proc = proc_lookup(buffer->top, up);
+        if (proc == NULL) error_elt(up->elt, "No matching proc declaration.");
         int offset = proc->offset;
-        if (offset == -1) error("No matching proc declaration.");
+        
 
-        if (up->desc != NULL && up->desc->type == PAR_O)
-            stack_parameters(up->desc->desc, buffer, proc, 0);
+        if ( get_token(up, DESC)->type == PAR_O)
+            stack_parameters(get_token_2(up, DESC, DESC), buffer, proc, 0);
         else 
             error("Invalid procedure call");
 
@@ -1232,36 +1270,21 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
             if (stack_offset == -1) {
                 int doffset = add_local_symbol(gvar, buffer, 1);
                 
-                
                 asm_load_ebx(gvar->offset + ELF_ENTRY_VADDR + sizeof(T_ELF) + sizeof(T_ELF_PRG32_HDR), buffer);
-                
                 asm_eax_ebx_addr(buffer);
-
-                //asm_retrieve_variable_mem(gvar, gvar->offset, buffer);
                 asm_store_variable(gvar, get_variable_dynamic_offset(doffset, buffer), buffer);
                 
                 last = line(up->next, doffset, buffer);  
-                //asm_store_variable_mem(gvar, gvar->offset, buffer);
                 asm_retrieve_variable(buffer->local_symbol[doffset], get_variable_dynamic_offset(doffset, buffer), buffer);
                 asm_load_ebx(gvar->offset + ELF_ENTRY_VADDR + sizeof(T_ELF) + sizeof(T_ELF_PRG32_HDR), buffer);
                 
                 asm_ebx_addr_eax(buffer);      
-                                                
-                //asm_remove_variable(buffer, get_variable_dynamic_offset(doffset, buffer));
-                
-                asm_remove_variable(buffer, 4);
-                buffer->local_symbol_count--;
+                unstack_local_symbol(buffer);
             } else {
-                //error("BOO");
-
-                //asm_retrieve_variable_mem(gvar, gvar->offset, buffer);
                 asm_load_ebx(gvar->offset + ELF_ENTRY_VADDR + sizeof(T_ELF) + sizeof(T_ELF_PRG32_HDR), buffer);
                 
                 asm_eax_ebx_addr(buffer);
-
-                //asm_store_variable(gvar, get_variable_dynamic_offset(stack_offset, buffer), buffer);
                 last = line(up->next, stack_offset, buffer);     
-                //asm_store_variable_mem(gvar, gvar->offset, buffer);                
             }
         }
         return last;
@@ -1307,28 +1330,24 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         U8 * jmptr = NULL; 
         U32 offset = 0;
         U32 offset2 = 0;
-        if (up->desc != NULL && up->desc->desc != NULL && up->desc->desc->next != NULL) {
-            //TO FIX
-            int doffset = add_local_symbol(&anonymous_int, buffer, 1);
-            block(up->desc->desc->next, doffset, buffer);
-            asm_remove_variable(buffer, 4);
-            buffer->local_symbol_count--;              
-            asm_test_eax(buffer);
-            asm_jump_equal(buffer, 0);
-            jgptr = &(buffer->buffer[buffer->length - 4]);
-            offset = buffer->length;
-        } else error("Error on \"if\" statement. condition clause");
+        
+        int doffset = add_local_symbol(&anonymous_int, buffer, 1);
+        block(get_token_3(up, DESC, DESC, NEXT), doffset, buffer);
+        unstack_local_symbol(buffer);
+
+        asm_test_eax(buffer);
+        asm_jump_equal(buffer, 0);
+        jgptr = &(buffer->buffer[buffer->length - 4]);
+        offset = buffer->length;
 
 
         puts("IF FIRST BODY");
-        int local_sym_count = buffer->local_symbol_count;
-        if (up->desc != NULL && up->desc->next != NULL && up->desc->next->next != NULL && up->desc->next->next->desc != NULL && up->desc->next->next->desc->next != NULL) {
-            block(up->desc->next->next->desc->next, -1, buffer);
-            asm_jump(buffer, 0);
-            jmptr = &buffer->buffer[buffer->length - 4];
-            offset2 = buffer->length;
-        } else error("Error on \"if\" statement. first condition body");
-        buffer->local_symbol_count = local_sym_count;
+
+        
+        block(get_token_5(up, DESC, NEXT, NEXT, DESC, NEXT), -1, buffer);
+        asm_jump(buffer, 0);
+        jmptr = &buffer->buffer[buffer->length - 4];
+        offset2 = buffer->length;
 
         offset = buffer->length - offset;
         memcpy( jgptr, &offset, sizeof(U32) );
@@ -1336,11 +1355,8 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         puts("IF SECOND BODY");
         
         if (up->next != NULL && up->next->type == ELSE) 
-            if (up->next->desc != NULL && up->next->desc->desc != NULL && up->next->desc->desc->next != NULL) {
-                block(up->next->desc->desc->next, -1, buffer);
-            } else error("Error on \"if\" statement. second condition body");
-
-        buffer->local_symbol_count  = local_sym_count;
+            block(get_token_4(up, NEXT, DESC, DESC, NEXT), -1, buffer);
+            
         offset2 = buffer->length - offset2;
         memcpy( jmptr, &offset2, sizeof(U32) );
         
@@ -1350,20 +1366,19 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         return up;
 
     } else if (up->type == FOR) {
-        int s_count = buffer->local_symbol_count;
 
-        T_NODE * last = line(up->desc->desc->next, -1, buffer);
+        T_NODE * last = line(get_token_3(up, DESC, DESC, NEXT), -1, buffer);
         U32 offset = buffer->length;
-        //TO FIX
+
         int doffset = add_local_symbol(&anonymous_int, buffer, 1);        
         last = line(last->next, doffset, buffer);
-        asm_remove_variable(buffer, 4);
-        buffer->local_symbol_count--;          
+        unstack_local_symbol(buffer);
+
         asm_test_eax(buffer);
         asm_jump_equal(buffer, 0);        
         U32 offset3 = buffer->length;
         U8 * jcondptr = &(buffer->buffer[buffer->length - 4]);
-        block(up->desc->next->next->desc, -1, buffer);
+        block(get_token_4(up, DESC, NEXT, NEXT, DESC), -1, buffer);
         line(last->next, -1, buffer);
         asm_jump(buffer, 0);
         U8 * jcondptr2 = &(buffer->buffer[buffer->length - 4]);
@@ -1374,24 +1389,21 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         memcpy( jcondptr, &offset3, sizeof(U32) );
 
         
-        asm_remove_variable(buffer, get_variable_dynamic_offset((s_count == 0) ? s_count : s_count - 1, buffer));
-        buffer->local_symbol_count = s_count;
         return up;
         
     } else if (up->type == WHILE) {
 
-        int s_count = buffer->local_symbol_count;
 
         U32 offset = buffer->length;
         int doffset = add_local_symbol(&anonymous_int, buffer, 1);              
-        T_NODE * last = line(up->desc->desc->next, doffset, buffer);
-        asm_remove_variable(buffer, 4);
-        buffer->local_symbol_count--;          
+        T_NODE * last = line(get_token_3(up, DESC, DESC, NEXT), doffset, buffer);
+        unstack_local_symbol(buffer);
+
         asm_test_eax(buffer);
         asm_jump_equal(buffer, 0);          
         U32 offset3 = buffer->length;
         U8 * jcondptr = &(buffer->buffer[buffer->length - 4]);
-        block(up->desc->next->next->desc, -1, buffer);
+        block(get_token_4(up, DESC, NEXT, NEXT, DESC), -1, buffer);
         asm_jump(buffer, 0);
         U8 * jcondptr2 = &(buffer->buffer[buffer->length - 4]);
         
@@ -1399,26 +1411,18 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         memcpy( jcondptr2, &offset2, sizeof(U32) );
         offset3 = buffer->length - offset3;
         memcpy( jcondptr, &offset3, sizeof(U32) );
-
-        
-        asm_remove_variable(buffer, get_variable_dynamic_offset((s_count == 0) ? s_count : s_count - 1, buffer));
-        buffer->local_symbol_count = s_count;
     
-    } else if (up->type == DO) {;
-        int s_count = buffer->local_symbol_count;
+    } else if (up->type == DO) {
 
         U32 offset = buffer->length;
-        block(up->desc->desc->next, -1, buffer);
+        block(get_token_3(up, DESC, DESC, NEXT), -1, buffer);
         U8 * jcondptr2  = NULL;
-        if (up->next != NULL && up->next->type == WHILE && up->next->desc->desc->next != NULL ) {
-            //TO FIX
-            int doffset = add_local_symbol(&anonymous_int, buffer, 1);
-            line(up->next->desc->desc->next, doffset, buffer);
-            asm_remove_variable(buffer, 4);
-            buffer->local_symbol_count--;    
-            asm_test_eax(buffer);
-            asm_jump_equal(buffer, 0);              
-        } else error("Error after DO");
+       
+        int doffset = add_local_symbol(&anonymous_int, buffer, 1);
+        line(get_token_4(up,NEXT,DESC,DESC,NEXT), doffset, buffer);
+        unstack_local_symbol(buffer);
+        asm_test_eax(buffer);
+        asm_jump_equal(buffer, 0);              
 
         jcondptr2 = &(buffer->buffer[buffer->length - 4]);
         int offset3 = buffer->length;
@@ -1430,17 +1434,16 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         printf("JUMP_LE: %x\n", offset2);
         memcpy( jcondptr2, &offset2, sizeof(U32) );
         
-        asm_remove_variable(buffer, get_variable_dynamic_offset((s_count == 0) ? s_count : s_count - 1, buffer));
-        buffer->local_symbol_count = s_count;
+
         return up->next;
     } else if (up->type == EQ) {
 
-        T_NODE * last = one(up->next, stack_offset, buffer);
+        T_NODE * last = one(get_token(up,NEXT), stack_offset, buffer);
         asm_store_variable(buffer->local_symbol[stack_offset], get_variable_dynamic_offset(stack_offset, buffer), buffer);
         return last;
         
     } else if (up->type == ADD) {
-        T_NODE * last = one(up->next, stack_offset, buffer);
+        T_NODE * last = one(get_token(up,NEXT), stack_offset, buffer);
         asm_add_variable_and_store(buffer->local_symbol[stack_offset], get_variable_dynamic_offset(stack_offset, buffer), buffer);
         return last;
 
@@ -1485,13 +1488,14 @@ T_NODE * root_step(T_NODE * up, T_BUFFER * buffer) {
         printf("LOCAL SYMBOL IN SIGNATURE: %d\n", buffer->local_symbol_count);
         buffer->local_symbol[buffer->local_symbol_count++] = &dummy; // Symbol for return adress of the call
 
-        return block(up->desc->next->next->desc, -1, buffer);
+        return block(get_token_4(up, DESC, NEXT, NEXT, DESC), -1, buffer);
+
     } else if (is_variable_decl(up, buffer)) {
         display_elt_ctxt("Global bariable declaration: ", up->elt);
 
         add_global_symbol(up, buffer);
         return up;
-    }
+    } else if (up->elt != NULL) error_elt(up->elt, "Unknow token.");
     return up;
 }
 
