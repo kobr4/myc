@@ -204,7 +204,7 @@ T_ELF_PRG32_HDR elf32_prg_hdr = {
 
 void error(char * msg) {
     puts(msg);
-    exit(0);
+    exit(-1);
 }
 
 
@@ -231,7 +231,7 @@ void error_elt(T_ELT * elt, char * msg) {
     display_elt(elt);
     printf(". ");
     puts(msg);
-    exit(0);
+    exit(-1);
 }
 
 void display_elt_ctxt(char * msg, T_ELT * elt) {
@@ -1494,8 +1494,8 @@ T_NODE * root_step(T_NODE * up, T_BUFFER * buffer) {
         display_elt_ctxt("Global bariable declaration: ", up->elt);
 
         add_global_symbol(up, buffer);
-        return up;
-    } else if (up->elt != NULL) error_elt(up->elt, "Unknow token.");
+        return get_token(up,NEXT);
+    } //else if (up->elt != NULL) error_elt(up->elt, "Unknow token.");
     return up;
 }
 
