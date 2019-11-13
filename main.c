@@ -45,9 +45,10 @@ typedef struct T_ELT {
 typedef struct T_NODE {
     struct T_NODE * desc;
     struct T_NODE * next;
+    struct T_NODE * prev;
     T_ELT * elt;
     enum keyword type;
-    T_CTXT ctxt;
+    //T_CTXT ctxt;
     struct T_NODE * asc;
     int offset;
 } T_NODE;
@@ -352,7 +353,7 @@ T_NODE * add_desc_node(T_NODE * father, T_ELT * elt) {
     new_n->desc = NULL;
     new_n->next = NULL;
     new_n->elt = elt;
-    new_n->ctxt.type = END;
+    //new_n->ctxt.type = END;
     if (elt != NULL)
         new_n->type = type(elt);
     else new_n->type = END;
@@ -371,12 +372,13 @@ T_NODE * add_desc_node(T_NODE * father, T_ELT * elt) {
     return new_n;
 }
 
-T_NODE * add_next_node(T_NODE * node, T_ELT * elt, T_CTXT ctxt) {
+T_NODE * add_next_node(T_NODE * node, T_ELT * elt, T_NODE * prev) {
     T_NODE * new_n = (T_NODE *)malloc(sizeof(T_NODE));
     new_n->desc = NULL;
     new_n->next = NULL;
     new_n->elt = elt;
-    new_n->ctxt = ctxt;
+    new_n->prev = prev;
+    //new_n->ctxt = ctxt;
     new_n->type = type(elt);
     new_n->asc = node->asc;
 
@@ -413,7 +415,7 @@ T_ELT * tokenize(char * input,int size) {
             case ')':
             case '(':
             case ',':
-            case '*':
+            
             case ';':
                 if (current_exp != -1) {
                     current = add_token(current, &input[current_exp], c-current_exp, line);
@@ -423,6 +425,7 @@ T_ELT * tokenize(char * input,int size) {
                 break;
             case '-':
             case '+':
+            case '*':
             case '=':
                 if (current_exp == -1) {
                     current_exp = c;
@@ -452,7 +455,7 @@ T_ELT * tokenize(char * input,int size) {
     return head;
 }
 
-void create_node_expr(T_NODE * up, T_ELT * current, T_CTXT ctxt) {
+void create_node_expr(T_NODE * up, T_ELT * current) {
     T_NODE * current_n = NULL;
     
     if (current == NULL) 
@@ -470,17 +473,20 @@ void create_node_expr(T_NODE * up, T_ELT * current, T_CTXT ctxt) {
         case INT:
         case CHAR:
         case SHORT:
-            ctxt.type = t_current;
-            create_node_expr(up, current->next, ctxt);
+            //ctxt.type = t_current;
+            //current_n = add_desc_node(up, current);
+            current_n = add_next_node(up, current, up);
+            create_node_expr(current_n, current->next);
             break;
         case PAR_C:
         case ACC_C:
-            ctxt.type = t_current;
-            current_n = add_next_node(up->asc, current, ctxt);
-            create_node_expr(current_n->asc, current->next, ctxt);
+            //ctxt.type = t_current;
+            current_n = add_next_node(up->asc, current, up);
+            create_node_expr(current_n->asc, current->next);
             break;
         case END:
         case EQ:
+        case PTR:
         case ADD:
         case SUB:
         case INF:
@@ -493,25 +499,25 @@ void create_node_expr(T_NODE * up, T_ELT * current, T_CTXT ctxt) {
         case SUBSUB:
         case WHILE:
         case DO:
-            ctxt.type = t_current;
-            current_n = add_next_node(up, current, ctxt);
-            create_node_expr(current_n, current->next, ctxt);      
+            //ctxt.type = t_current;
+            current_n = add_next_node(up, current, up);
+            create_node_expr(current_n, current->next);      
             break;
         case PAR_O:
         case ACC_O:
-            ctxt.type = t_current;
+            //ctxt.type = t_current;
             current_n = add_desc_node(up, current);
             current_n = add_desc_node(current_n, NULL);
-            create_node_expr(current_n, current->next, ctxt);
+            create_node_expr(current_n, current->next);
             break;
         case IF:
         case ELSE:
         case EXPR:
-            current_n = add_next_node(up, current, ctxt);
-            create_node_expr(current_n, current->next, ctxt);
+            current_n = add_next_node(up, current, up);
+            create_node_expr(current_n, current->next);
             break;
         default:
-            create_node_expr(up, current->next, ctxt);
+            create_node_expr(up, current->next);
             break;
     }
 }
@@ -555,7 +561,7 @@ int is_matching(T_NODE * nodeA, T_NODE * nodeB) {
 
 int is_procedure_body(T_NODE * up) {
     
-    if ((up->type == EXPR) && is_type(up->ctxt.type)
+    if ((up->type == EXPR) && (up->prev != NULL) && is_type(up->prev->type)
         && (up->desc != NULL) && (up->desc->type == PAR_O)) {
         return 1;
     }
@@ -564,7 +570,7 @@ int is_procedure_body(T_NODE * up) {
 }
 
 int is_procedure_call(T_NODE * up) {
-    if ((up->type == EXPR) && !is_type(up->ctxt.type)
+    if ((up->type == EXPR) && (up->prev == NULL || !is_type(up->prev->type))
         && up->desc != NULL &&(up->desc->type == PAR_O)) {
         return 1;
     }
@@ -573,7 +579,7 @@ int is_procedure_call(T_NODE * up) {
 }
 
 int variable_size(T_NODE * up) {
-    switch (up->ctxt.type) {
+    switch (up->prev->type) {
         case INT: 
             return 4;
             break;
@@ -588,7 +594,7 @@ int variable_size(T_NODE * up) {
                 return 4;
             }
             display_elt_ctxt("Error on variable size: ", up->elt);    
-            printf("TYPE: %d %d\n", up->ctxt.type, INT);      
+            printf("TYPE: %d %d\n", up->asc->type, INT);      
             exit(0);
             return 0;
 
@@ -680,6 +686,8 @@ void asm_retrieve_variable_al(int offset, T_BUFFER * buffer) {
 }
 
 void asm_retrieve_variable(T_NODE * n, int offset, T_BUFFER * buffer) {
+    puts("RETRIEVE !");
+
     switch(variable_size(n)) {
         case 1:
             asm_retrieve_variable_al(offset, buffer);
@@ -1013,7 +1021,6 @@ void asm_update_jump_length(U8 * ptr, T_BUFFER * buffer, U32 start_offset) {
     memcpy( ptr, &start_offset, sizeof(U32) );
 }
 
-
 int get_variable_offset(T_NODE * target, T_BUFFER * buffer) {  
     int offset = 0;
     for (int i = 0; (i < buffer->local_symbol_count) && (!is_matching(buffer->local_symbol[buffer->local_symbol_count - i - 1], target));i++) {        
@@ -1069,7 +1076,7 @@ int get_all_variable_offset(T_BUFFER * buffer) {
 }
 
 int is_variable_decl(T_NODE * up, T_BUFFER * buffer) {
-    if ((up->type == EXPR) && is_type(up->ctxt.type) && !is_number(up->elt) && get_variable_dynamic_offset_from_symbol(up, buffer) == - 1) {
+    if ((up->type == EXPR) && up->prev != NULL && is_type(up->prev->type) && !is_number(up->elt) && get_variable_dynamic_offset_from_symbol(up, buffer) == - 1) {
         return 1;
     }
     return 0;
@@ -1179,20 +1186,20 @@ T_NODE * prog_arg(T_NODE * proc, int c) {
 }
 
 void stack_parameters(T_NODE * up, T_BUFFER * buffer, T_NODE * proc, int count) {
-    if (up->elt == NULL || up->type == COM)
+    if (up->elt == NULL || up->type == COM || is_type(up->type))
         return  stack_parameters(up->next, buffer, proc, count);
 
     display_elt_ctxt("STACK parameter: ", up->elt);  
 
     if (up->elt != NULL) {
         T_NODE * n = prog_arg(proc, count);
-        up->ctxt.type = n->ctxt.type;
-        
 
-        int doffset = add_local_symbol(up, buffer, 1);
+        display_elt_ctxt("found arg: ", n->elt);
+
+        int doffset = add_local_symbol(n->next, buffer, 1);
         
         one(up, doffset, buffer);
-        asm_store_variable(n, get_variable_dynamic_offset(doffset, buffer), buffer);
+        asm_store_variable(n->next, get_variable_dynamic_offset(doffset, buffer), buffer);
         if (up->next != NULL)
             line(up->next, doffset, buffer);
         
@@ -1259,15 +1266,21 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         display_elt_ctxt("Variable assign: ", up->elt);
         
         T_NODE * last = up;
-        
+
         if (!is_global(up, buffer)) {
             int doffset = get_variable_dynamic_offset_from_symbol(up, buffer);
+            if (doffset == -1) error_elt(up->elt, "No local variable found with name.");
+
             asm_retrieve_variable(buffer->local_symbol[doffset], get_variable_offset(up, buffer), buffer);
+
             if (stack_offset == -1) {
                 last = line(up->next, doffset, buffer);
             } 
         } else {
+            
             int goffset = get_offset_from_global_symbol(up, buffer);
+            if (goffset == -1) error_elt(up->elt, "Global variable reference not found."); 
+
             T_NODE * gvar = buffer->global_symbol[goffset];
             if (stack_offset == -1) {
                 int doffset = add_local_symbol(gvar, buffer, 1);
@@ -1312,9 +1325,8 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
 
     } else if (up->type == RET) {
         T_NODE * n = calling_proc(up);
-        up->ctxt.type = n->ctxt.type;
 
-        int doffset = add_local_symbol(up, buffer, 1);
+        int doffset = add_local_symbol(n, buffer, 1);
         T_NODE * last = one(up->next, doffset, buffer);
         asm_store_variable(n, get_variable_dynamic_offset(doffset, buffer), buffer);
         if (last != NULL && last->next != NULL)
@@ -1486,15 +1498,15 @@ void display_node(T_NODE * node, int spacing) {
     for (int i = 0;i < spacing;i++) putchar('-');
     display_elt(node->elt);
 
-    if (node->ctxt.type == VOID) {
+    if (node->prev != NULL && node->prev->type == VOID) {
         printf("[VOID]");
     }
     
-    if (node->ctxt.type == INT) {
+    if (node->prev && node->prev->type == INT) {
         printf("[INT]");
     }
 
-    if (node->ctxt.type == CHAR) {
+    if (node->prev && node->prev->type == CHAR) {
         printf("[CHAR]");
     }
     
@@ -1528,7 +1540,8 @@ void write_output(char * filename,  T_BUFFER * buffer) {
 }
 
 void main(int c, char** argv) {
-    dummy.ctxt.type = INT;
+    dummy.prev = &dummy;
+    dummy.type = INT;
     dummy.elt = NULL;
 
     
@@ -1536,13 +1549,16 @@ void main(int c, char** argv) {
     elt_int.str = "__ANONYMOUS";
     elt_int.len = strlen(elt_int.str);
     anonymous_int.elt = &elt_int;
-    anonymous_int.ctxt.type = INT;
+    anonymous_int.prev = &anonymous_int;
+    anonymous_int.type = INT;
 
     anonymous_short.elt = &elt_int;
-    anonymous_short.ctxt.type = SHORT;
+    anonymous_short.prev = &anonymous_short;
+    anonymous_short.type = SHORT;
 
     anonymous_char.elt = &elt_int;
-    anonymous_char.ctxt.type = CHAR;
+    anonymous_char.prev = &anonymous_char;
+    anonymous_char.type = CHAR;
 
     printf("Reading file %s\n",argv[1]);
     int size;
@@ -1550,11 +1566,13 @@ void main(int c, char** argv) {
     T_ELT * elt = tokenize(filedata, size);
     display_all_elt(elt);
     T_NODE * up = add_desc_node(NULL, NULL);
-    T_CTXT ctxt;
-    ctxt.type = END;
+    //T_CTXT ctxt;
+    //ctxt.type = END;
     printf("CREATING AST\n");
-    create_node_expr(up, elt, ctxt);
+    create_node_expr(up, elt);
+    printf("After AST\n");
     display_node(up,0);
+    
     
     T_BUFFER * buffer = (T_BUFFER *)malloc(sizeof(T_BUFFER));
     buffer->length = 0;
