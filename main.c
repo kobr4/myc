@@ -230,8 +230,7 @@ void error_elt(T_ELT * elt, char * msg) {
     printf("Error at line %d near ", elt->line);
     display_elt(elt);
     printf(". ");
-    puts(msg);
-    exit(-1);
+    error(msg);
 }
 
 void display_elt_ctxt(char * msg, T_ELT * elt) {
@@ -243,6 +242,8 @@ void display_elt_ctxt(char * msg, T_ELT * elt) {
 char * read_file(char * filename, int * size) {
     
     FILE * file = fopen(filename, "r");
+    if (file == NULL) error("Unable to open file");
+
     fseek(file, 0L, SEEK_END);
     *size = ftell(file);
     fseek(file, 0, SEEK_SET);
@@ -588,7 +589,6 @@ int variable_size(T_NODE * up) {
             }
             display_elt_ctxt("Error on variable size: ", up->elt);    
             printf("TYPE: %d %d\n", up->ctxt.type, INT);      
-            //return 4;
             exit(0);
             return 0;
 
@@ -614,20 +614,23 @@ void write_buffer_4(T_BUFFER * buffer, U8 a, U8 b, U8 c, U8 d) {
     buffer->buffer[buffer->length++] = d;
 }
 
+void write_buffer_dword(T_BUFFER * buffer, U32 value) {
+    memcpy( &(buffer->buffer[buffer->length]), &value , sizeof(value));
+    buffer->length += 4;
+}
+
 // mov EAX, value
 void asm_load_eax(U32 value, T_BUFFER * buffer) {
     printf("[ASM][%x] mov eax,  %d\n", buffer->length, value);
     buffer->buffer[buffer->length++] = 0xB8; 
-    memcpy( &(buffer->buffer[buffer->length]), &value , sizeof(value));
-    buffer->length += 4;
+    write_buffer_dword(buffer, value);
 } 
 
 // mov EBX, value
 void asm_load_ebx(U32 value, T_BUFFER * buffer) {
     printf("[ASM][%x] mov ebx,  %d\n", buffer->length, value);
     buffer->buffer[buffer->length++] = 0xBB; 
-    memcpy( &(buffer->buffer[buffer->length]), &value , sizeof(value));
-    buffer->length += 4;
+    write_buffer_dword(buffer, value);
 } 
 
 // mov AX, value
@@ -697,8 +700,7 @@ void asm_retrieve_variable(T_NODE * n, int offset, T_BUFFER * buffer) {
 // mov eax, [offset]
 void asm_retrieve_variable_nested_mem(int offset, T_BUFFER * buffer) {
     buffer->buffer[buffer->length++] = 0xA1;
-    memcpy( &(buffer->buffer[buffer->length]), &offset , sizeof(offset));
-    buffer->length += 4; 
+    write_buffer_dword(buffer, offset);
 }
 
 // mov ax, [offset]
@@ -718,8 +720,7 @@ void asm_retrieve_variable_eax_mem(int offset, T_BUFFER * buffer) {
 void asm_retrieve_variable_al_mem(int offset, T_BUFFER * buffer) {
     printf("[ASM][%x] mov al, [%x]\n", buffer->length, offset);
     buffer->buffer[buffer->length++] = 0xA0;
-    memcpy( &(buffer->buffer[buffer->length]), &offset , sizeof(offset));
-    buffer->length += 4; 
+    write_buffer_dword(buffer, offset);
 }
 
 void asm_retrieve_variable_mem(T_NODE * n, int offset, T_BUFFER * buffer) {
@@ -863,8 +864,7 @@ void asm_store_variable(T_NODE * n, int offset, T_BUFFER * buffer) {
 void asm_store_variable_al_mem(int offset, T_BUFFER * buffer) {
     printf("[ASM][%x] mov [%x], al\n", buffer->length, offset);
     buffer->buffer[buffer->length++] = 0xA2;
-    memcpy( &(buffer->buffer[buffer->length]), &offset , sizeof(offset));
-    buffer->length += 4; 
+    write_buffer_dword(buffer, offset);
 }
 
 //mov [offset], ax
@@ -872,16 +872,14 @@ void asm_store_variable_ax_mem(int offset, T_BUFFER * buffer) {
     printf("[ASM][%x] mov [%x], ax\n", buffer->length, offset);
     buffer->buffer[buffer->length++] = 0x66;
     buffer->buffer[buffer->length++] = 0xA3;
-    memcpy( &(buffer->buffer[buffer->length]), &offset , sizeof(offset));
-    buffer->length += 4; 
+    write_buffer_dword(buffer, offset);
 }
 
 //mov [offset], eax
 void asm_store_variable_eax_mem(int offset, T_BUFFER * buffer) {
     printf("[ASM][%x] mov [%x], eax\n", buffer->length, offset);
     buffer->buffer[buffer->length++] = 0xA3;
-    memcpy( &(buffer->buffer[buffer->length]), &offset , sizeof(offset));
-    buffer->length += 4; 
+    write_buffer_dword(buffer, offset);
 }
 
 void asm_store_variable_mem(T_NODE * n, int offset, T_BUFFER * buffer) {
@@ -919,8 +917,7 @@ void asm_call(T_BUFFER * buffer, U32 addr) {
     addr = addr - 5;
     printf("[ASM][%x] call %x\n",buffer->length, addr);
     buffer->buffer[buffer->length++] = 0xE8; 
-    memcpy( &(buffer->buffer[buffer->length]), &addr , sizeof(addr));
-    buffer->length += 4;
+    write_buffer_dword(buffer, addr);
 }
 
 //mov ebx, eax
@@ -936,61 +933,61 @@ void asm_cmp_eax_ebx(T_BUFFER * buffer) {
 }
 
 //jg addr
-void asm_jump_greater(T_BUFFER * buffer, U32 addr) {
+U8 * asm_jump_greater(T_BUFFER * buffer, U32 addr) {
     printf("[ASM][%x] jg %x\n",buffer->length, addr);
     write_buffer_2(buffer, 0x0F, 0x8F); 
-    memcpy( &(buffer->buffer[buffer->length]), &addr , sizeof(addr));
-    buffer->length += 4;
+    write_buffer_dword(buffer, addr);
+    return &(buffer->buffer[buffer->length - 4]);    
 }
 
 //jge addr
-void asm_jump_greater_eq(T_BUFFER * buffer, U32 addr) {
+U8 * asm_jump_greater_eq(T_BUFFER * buffer, U32 addr) {
     printf("[ASM][%x] jg %x\n",buffer->length, addr);
     write_buffer_2(buffer, 0x0F, 0x8D);
-    memcpy( &(buffer->buffer[buffer->length]), &addr , sizeof(addr));
-    buffer->length += 4;
+    write_buffer_dword(buffer, addr);
+    return &(buffer->buffer[buffer->length - 4]);
 }
 
 
 //jl addr
-void asm_jump_less(T_BUFFER * buffer, int addr) {
+U8 * asm_jump_less(T_BUFFER * buffer, int addr) {
     printf("[ASM][%x] jl %x\n",buffer->length, addr);
     write_buffer_2(buffer, 0x0F, 0x8C);
-    memcpy( &(buffer->buffer[buffer->length]), &addr , sizeof(addr));
-    buffer->length += 4;
+    write_buffer_dword(buffer, addr);
+    return &(buffer->buffer[buffer->length - 4]);    
 }
 
 //jle addr
-void asm_jump_less_eq(T_BUFFER * buffer, int addr) {
+U8 * asm_jump_less_eq(T_BUFFER * buffer, int addr) {
     printf("[ASM][%x] jl %x\n",buffer->length, addr);
     write_buffer_2(buffer, 0x0F, 0x8E);
-    memcpy( &(buffer->buffer[buffer->length]), &addr , sizeof(addr));
-    buffer->length += 4;
+    write_buffer_dword(buffer, addr);
+    return &(buffer->buffer[buffer->length - 4]);
 }
 
 //je addr
-void asm_jump_equal(T_BUFFER * buffer, U32 addr) {
+U8 * asm_jump_equal(T_BUFFER * buffer, U32 addr) {
     printf("[ASM][%x] je %x\n",buffer->length, addr);
     write_buffer_2(buffer, 0x0F, 0x84);
-    memcpy( &(buffer->buffer[buffer->length]), &addr , sizeof(addr));
-    buffer->length += 4;
+    write_buffer_dword(buffer, addr);
+    return &(buffer->buffer[buffer->length - 4]);    
 }
 
 //jne addr
-void asm_jump_not_equal(T_BUFFER * buffer, U32 addr) {
+U8 * asm_jump_not_equal(T_BUFFER * buffer, U32 addr) {
     printf("[ASM][%x] jne %x\n",buffer->length, addr);
     write_buffer_2(buffer, 0x0F, 0x85);
-    memcpy( &(buffer->buffer[buffer->length]), &addr , sizeof(addr));
-    buffer->length += 4;
+    write_buffer_dword(buffer, addr);
+    return &(buffer->buffer[buffer->length - 4]);
 }
 
 
 //jmp addr
-void asm_jump(T_BUFFER * buffer, int addr) {
+U8 * asm_jump(T_BUFFER * buffer, int addr) {
     printf("[ASM][%x] jmp %x\n",buffer->length, addr);
     buffer->buffer[buffer->length++] = 0xE9;
-    memcpy( &(buffer->buffer[buffer->length]), &addr , sizeof(addr));
-    buffer->length += 4;
+    write_buffer_dword(buffer, addr);
+    return &(buffer->buffer[buffer->length - 4]);
 }
 
 //test eax
@@ -1009,6 +1006,11 @@ void asm_eax_ebx_addr(T_BUFFER * buffer) {
 void asm_ebx_addr_eax(T_BUFFER * buffer) {
     printf("[ASM][%x] mov (ebx), eax\n", buffer->length);
     write_buffer_2(buffer, 0x89, 0x03);
+}
+
+void asm_update_jump_length(U8 * ptr, T_BUFFER * buffer, U32 start_offset) {
+    start_offset = buffer->length - start_offset;
+    memcpy( ptr, &start_offset, sizeof(U32) );
 }
 
 
@@ -1336,8 +1338,7 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         unstack_local_symbol(buffer);
 
         asm_test_eax(buffer);
-        asm_jump_equal(buffer, 0);
-        jgptr = &(buffer->buffer[buffer->length - 4]);
+        jgptr = asm_jump_equal(buffer, 0);
         offset = buffer->length;
 
 
@@ -1345,20 +1346,17 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
 
         
         block(get_token_5(up, DESC, NEXT, NEXT, DESC, NEXT), -1, buffer);
-        asm_jump(buffer, 0);
-        jmptr = &buffer->buffer[buffer->length - 4];
+        jmptr = asm_jump(buffer, 0);
         offset2 = buffer->length;
 
-        offset = buffer->length - offset;
-        memcpy( jgptr, &offset, sizeof(U32) );
+        asm_update_jump_length(jgptr, buffer, offset);
 
         puts("IF SECOND BODY");
         
         if (up->next != NULL && up->next->type == ELSE) 
             block(get_token_4(up, NEXT, DESC, DESC, NEXT), -1, buffer);
             
-        offset2 = buffer->length - offset2;
-        memcpy( jmptr, &offset2, sizeof(U32) );
+        asm_update_jump_length(jmptr, buffer, offset2);
         
         if (up->next != NULL && up->next->type == ELSE)
             up = up->next;
@@ -1375,19 +1373,14 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         unstack_local_symbol(buffer);
 
         asm_test_eax(buffer);
-        asm_jump_equal(buffer, 0);        
+        U8 * jcondptr = asm_jump_equal(buffer, 0);        
         U32 offset3 = buffer->length;
-        U8 * jcondptr = &(buffer->buffer[buffer->length - 4]);
+    
         block(get_token_4(up, DESC, NEXT, NEXT, DESC), -1, buffer);
         line(last->next, -1, buffer);
-        asm_jump(buffer, 0);
-        U8 * jcondptr2 = &(buffer->buffer[buffer->length - 4]);
+        asm_jump(buffer, offset - buffer->length - 5);
         
-        int offset2 =  offset - buffer->length;
-        memcpy( jcondptr2, &offset2, sizeof(U32) );
-        offset3 = buffer->length - offset3;
-        memcpy( jcondptr, &offset3, sizeof(U32) );
-
+        asm_update_jump_length(jcondptr, buffer, offset3);
         
         return up;
         
@@ -1400,40 +1393,27 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         unstack_local_symbol(buffer);
 
         asm_test_eax(buffer);
-        asm_jump_equal(buffer, 0);          
+        U8 * jcondptr = asm_jump_equal(buffer, 0);          
         U32 offset3 = buffer->length;
-        U8 * jcondptr = &(buffer->buffer[buffer->length - 4]);
+
         block(get_token_4(up, DESC, NEXT, NEXT, DESC), -1, buffer);
-        asm_jump(buffer, 0);
-        U8 * jcondptr2 = &(buffer->buffer[buffer->length - 4]);
-        
-        int offset2 =  offset - buffer->length;
-        memcpy( jcondptr2, &offset2, sizeof(U32) );
-        offset3 = buffer->length - offset3;
-        memcpy( jcondptr, &offset3, sizeof(U32) );
+        asm_jump(buffer, offset - buffer->length - 5);
+        asm_update_jump_length(jcondptr, buffer, offset3);
     
     } else if (up->type == DO) {
 
         U32 offset = buffer->length;
         block(get_token_3(up, DESC, DESC, NEXT), -1, buffer);
-        U8 * jcondptr2  = NULL;
        
         int doffset = add_local_symbol(&anonymous_int, buffer, 1);
         line(get_token_4(up,NEXT,DESC,DESC,NEXT), doffset, buffer);
         unstack_local_symbol(buffer);
         asm_test_eax(buffer);
-        asm_jump_equal(buffer, 0);              
+        U8 * jcondptr2 = asm_jump_equal(buffer, 0);              
+        U32 offset2 = buffer->length;
 
-        jcondptr2 = &(buffer->buffer[buffer->length - 4]);
-        int offset3 = buffer->length;
-
-        
         asm_jump(buffer, offset - buffer->length - 5);
-        printf("JUMP: %x\n", offset - buffer->length - 5);
-        int offset2 =  buffer->length - offset3;
-        printf("JUMP_LE: %x\n", offset2);
-        memcpy( jcondptr2, &offset2, sizeof(U32) );
-        
+        asm_update_jump_length(jcondptr2, buffer, offset2);
 
         return up->next;
     } else if (up->type == EQ) {
@@ -1525,6 +1505,7 @@ void display_node(T_NODE * node, int spacing) {
 
 void write_output(char * filename,  T_BUFFER * buffer) {
     FILE * f = fopen(filename, "wb");
+    if (f == NULL) error("Unable to create destination file.");
 
     //ELF_ENTRY_VADDR+sizeof(T_ELF)+sizeof(T_ELF_PRG32_HDR),
     elf32.e_entry = ELF_ENTRY_VADDR + sizeof(T_ELF) + sizeof(T_ELF_PRG32_HDR)+ buffer->length;
