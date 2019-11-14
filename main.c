@@ -416,8 +416,7 @@ T_ELT * tokenize(char * input,int size) {
             case '}':
             case ')':
             case '(':
-            case ',':
-            
+            case ',':            
             case ';':
                 if (current_exp != -1) {
                     current = add_token(current, &input[current_exp], c-current_exp, line);
@@ -425,9 +424,26 @@ T_ELT * tokenize(char * input,int size) {
                 }            
                 current = add_token(current, &input[c], 1, line);
                 break;
-            case '-':
-            case '+':
             case '*':
+            
+                if (c > 1 && input[c-1] == '/') {                    
+                    while (c < size && !(input[c] == '/' && input[c-1] == '*')) {
+                        if (input[c] != '\n') line++;
+                        c++;
+                    }
+                    current_exp = -1;
+                } else {
+
+                    if (current_exp == -1) {
+                        current_exp = c;
+                    } else {
+                        current = add_token(current, &input[current_exp], c-current_exp, line);
+                        current_exp = c;                     
+                    }
+                }
+                break;
+            case '-':
+            case '+':            
             case '=':
             case '&':
                 if (current_exp == -1) {
@@ -435,6 +451,18 @@ T_ELT * tokenize(char * input,int size) {
                 } else if (input[c-1] == elt)  {
                     current = add_token(current, &input[current_exp], c-current_exp + 1, line);
                     current_exp = -1;                     
+                } else {
+                    current = add_token(current, &input[current_exp], c-current_exp, line);
+                    current_exp = c;                     
+                }
+                break;
+            case '/':
+                if (current_exp == -1) {
+                    current_exp = c;
+                } else if (input[c-1] == elt)  {
+                    while(c < size && input[c] != '\n') c++;
+                    line++;  
+                    current_exp = -1;             
                 } else {
                     current = add_token(current, &input[current_exp], c-current_exp, line);
                     current_exp = c;                     
@@ -727,13 +755,13 @@ void asm_retrieve_variable_nested_mem(int offset, T_BUFFER * buffer) {
 void asm_retrieve_variable_ax_mem(int offset, T_BUFFER * buffer) {
     printf("[ASM][%x] mov ax, [%x]\n", buffer->length, offset);
     buffer->buffer[buffer->length++] = 0x66;
-    asm_retrieve_variable_nested(offset, buffer);
+    asm_retrieve_variable_nested_mem(offset, buffer);
 }
 
 // mov eax, [offset]
 void asm_retrieve_variable_eax_mem(int offset, T_BUFFER * buffer) {
     printf("[ASM][%x] mov eax, [%x]\n", buffer->length, offset);
-    asm_retrieve_variable_nested(offset, buffer);
+    asm_retrieve_variable_nested_mem(offset, buffer);
 }
 
 // mov al, [offset]
@@ -1037,20 +1065,6 @@ void asm_test_eax(T_BUFFER * buffer) {
     write_buffer_2(buffer, 0x85, 0xC0);    
 }
 
-//mov eax, ss:[ebx]
-void asm_mov_eax_ss_ebx_addr(T_BUFFER * buffer) {
-    printf("[ASM][%x] mov eax, ss:[ebx]\n", buffer->length);
-    write_buffer_3(buffer, 0x36, 0x8B, 0x03);
-    //write_buffer_2(buffer, 0x89, 0x03);
-}
-
-//mov ss:[ebx], eax
-void asm_mov_ss_ebx_addr_eax(T_BUFFER * buffer) {
-    printf("[ASM][%x] mov ss:[ebx], eax\n", buffer->length);
-    write_buffer_3(buffer, 0x36, 0x89, 0x03);
-    //write_buffer_2(buffer, 0x8B, 0x03);
-}
-
 //mov eax, [ebx]
 void asm_mov_eax_ebx_addr(T_BUFFER * buffer) {
     printf("[ASM][%x] mov eax, (ebx)\n", buffer->length);
@@ -1058,7 +1072,7 @@ void asm_mov_eax_ebx_addr(T_BUFFER * buffer) {
 }
 
 //mov [ebx], eax
-void asm_ebx_addr_eax(T_BUFFER * buffer) {
+void asm_mov_ebx_addr_eax(T_BUFFER * buffer) {
     printf("[ASM][%x] mov (ebx), eax\n", buffer->length);
     write_buffer_2(buffer, 0x89, 0x03);
 }
@@ -1334,16 +1348,9 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
                 if (up->prev != NULL && up->prev->type == PTR) {
                     puts("Indirect retrive");
                     asm_mov_ebx_eax(buffer);
-                    asm_mov_eax_ss_ebx_addr(buffer);
-                    asm_store_variable(up, get_variable_dynamic_offset(stack_offset, buffer), buffer);
+                    asm_mov_eax_ebx_addr(buffer);;
                 }            
             }
-/*
-            if (up->prev != NULL && up->prev->type == PTR) {
-                asm_mov_ebx_eax(buffer);
-                asm_mov_eax_ebx_addr(buffer);
-            }
-*/
             
             if (stack_offset == -1) {
                 last = line(up->next, doffset, buffer);
@@ -1358,20 +1365,18 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
             if (stack_offset == -1) {
                 int doffset = add_local_symbol(gvar, buffer, 1);
                 
-                asm_load_ebx(gvar->offset + ELF_ENTRY_VADDR + sizeof(T_ELF) + sizeof(T_ELF_PRG32_HDR), buffer);
-                asm_mov_eax_ebx_addr(buffer);
+                asm_retrieve_variable_mem(gvar, gvar->offset + ELF_ENTRY_VADDR + sizeof(T_ELF) + sizeof(T_ELF_PRG32_HDR), buffer);
+
                 asm_store_variable(gvar, get_variable_dynamic_offset(doffset, buffer), buffer);
                 
                 last = line(up->next, doffset, buffer);  
-                asm_retrieve_variable(buffer->local_symbol[doffset], get_variable_dynamic_offset(doffset, buffer), buffer);
-                asm_load_ebx(gvar->offset + ELF_ENTRY_VADDR + sizeof(T_ELF) + sizeof(T_ELF_PRG32_HDR), buffer);
                 
-                asm_ebx_addr_eax(buffer);      
+                asm_retrieve_variable(buffer->local_symbol[doffset], get_variable_dynamic_offset(doffset, buffer), buffer);
+                asm_store_variable_mem(buffer->local_symbol[doffset], gvar->offset + ELF_ENTRY_VADDR + sizeof(T_ELF) + sizeof(T_ELF_PRG32_HDR), buffer);  
                 unstack_local_symbol(buffer);
             } else {
-                asm_load_ebx(gvar->offset + ELF_ENTRY_VADDR + sizeof(T_ELF) + sizeof(T_ELF_PRG32_HDR), buffer);
-                
-                asm_mov_eax_ebx_addr(buffer);
+                asm_retrieve_variable_mem(gvar, gvar->offset + ELF_ENTRY_VADDR + sizeof(T_ELF) + sizeof(T_ELF_PRG32_HDR), buffer);
+
                 last = line(up->next, stack_offset, buffer);     
             }
         }
@@ -1507,7 +1512,7 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         if (up->prev->prev != NULL && up->prev->prev->type == PTR && (up->prev->prev->prev == NULL || !is_type(up->prev->prev->prev->type))) {
             puts("INDIRECT STORE");
             asm_retrieve_variable_ebx(get_variable_dynamic_offset(stack_offset, buffer), buffer);
-            asm_mov_ss_ebx_addr_eax(buffer);
+            asm_mov_ebx_addr_eax(buffer);
         } else {
             asm_store_variable(buffer->local_symbol[stack_offset], get_variable_dynamic_offset(stack_offset, buffer), buffer);
         }
@@ -1532,9 +1537,17 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         asm_sub_variable_and_store(buffer->local_symbol[stack_offset], get_variable_dynamic_offset(stack_offset, buffer), buffer);
         return up;
     } else if (up->type == AND) {
-        asm_mov_eax_esp(buffer);
-        asm_add_eax_value(buffer, get_variable_offset(up->next, buffer));
+
+        if (!is_global(up->next, buffer)) { 
+            asm_mov_eax_esp(buffer);
+            asm_add_eax_value(buffer, get_variable_offset(up->next, buffer));
+        } else {
+            int goffset = get_offset_from_global_symbol(up->next, buffer);
+            asm_load_eax(buffer->global_symbol[goffset]->offset + ELF_ENTRY_VADDR + sizeof(T_ELF) + sizeof(T_ELF_PRG32_HDR), buffer);
+        }
         return up->next;
+    } else if (up->type == PTR) {
+        return one(up->next, stack_offset, buffer);
     }
 
     
@@ -1649,8 +1662,7 @@ void main(int c, char** argv) {
     T_ELT * elt = tokenize(filedata, size);
     display_all_elt(elt);
     T_NODE * up = add_desc_node(NULL, NULL);
-    //T_CTXT ctxt;
-    //ctxt.type = END;
+
     printf("CREATING AST\n");
     create_node_expr(up, elt);
     printf("After AST\n");

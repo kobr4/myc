@@ -141,3 +141,31 @@ then
 else 
     echo -e "[\e[31mFAILED\e[0m]"
 fi
+
+SOURCE="sample10.c"
+echo "10: $SOURCE"
+
+./main tests/$SOURCE > /dev/null
+COMPIL=$?
+$OUTBIN
+RUN=$?
+if [ $COMPIL = "0" ] && [ $RUN = "10" ] 
+then
+    echo -e "[\e[92mPASSED\e[0m]"
+else 
+    echo -e "[\e[31mFAILED\e[0m]"
+fi
+
+SOURCE="sample11.c"
+echo "11: $SOURCE"
+
+./main tests/$SOURCE > /dev/null
+COMPIL=$?
+$OUTBIN
+RUN=$?
+if [ $COMPIL = "0" ] && [ $RUN = "25" ] 
+then
+    echo -e "[\e[92mPASSED\e[0m]"
+else 
+    echo -e "[\e[31mFAILED\e[0m]"
+fi
