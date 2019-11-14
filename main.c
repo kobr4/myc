@@ -338,6 +338,35 @@ T_NODE * get_token_5(T_NODE * up, char a, char b, char c, char d, char e) {
 }
 
 
+T_NODE * get_token_null(T_NODE * up, char successor) {
+    if (up == NULL) return NULL;
+    switch (successor) {
+        case NEXT:
+            if (up->next == NULL)   return NULL;
+            else return up->next;
+            break;
+        case DESC:
+            if (up->desc == NULL) return NULL;
+            else return up->desc;
+            break;        
+    }
+    return NULL;
+}
+
+T_NODE * get_token_3_null(T_NODE * up, char a, char b, char c) {
+    return get_token_null(get_token_null(get_token_null(up, a), b), c);
+}
+
+T_NODE * get_token_4_null(T_NODE * up, char a, char b, char c, char d) {
+    return get_token_null(get_token_null(get_token_null(get_token_null(up, a), b), c), d);
+}
+
+T_NODE * get_token_5_null(T_NODE * up, char a, char b, char c, char d, char e) {
+    return get_token_null(get_token_4_null(up, a, b, c, d), e);
+}
+
+
+
 T_ELT * add_token(T_ELT * current, char * p, int len, int line) {
     T_ELT * new_c = (T_ELT *)malloc(sizeof(T_ELT));
     new_c->str = p;
@@ -1236,6 +1265,18 @@ T_NODE * block(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
     return up;
 }
 
+T_NODE * block_or_line(T_NODE * up, T_NODE * alternative, int stack_offset, T_BUFFER * buffer) {
+    int s_count = buffer->local_symbol_count;
+    T_NODE * last = alternative;
+    if (up != NULL)
+        block(up, stack_offset, buffer);
+    else
+        last = line(get_token(alternative, NEXT), stack_offset, buffer);
+    asm_remove_variable(buffer, get_variable_dynamic_offset((s_count == 0) ? s_count : s_count - 1, buffer));
+    buffer->local_symbol_count = s_count;
+    return last;        
+}
+
 T_NODE * calling_proc(T_NODE * up) {
     T_NODE * n = up->asc;
     while (!is_procedure_body(n) ) {
@@ -1435,7 +1476,10 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         puts("IF FIRST BODY");
 
         
-        block(get_token_5(up, DESC, NEXT, NEXT, DESC, NEXT), -1, buffer);
+        //block(get_token_5(up, DESC, NEXT, NEXT, DESC, NEXT), -1, buffer);
+        T_NODE * n = block_or_line(get_token_5_null(up, DESC, NEXT, NEXT, DESC, NEXT), up, -1, buffer);
+        T_NODE * last = n;
+        if (up->next != NULL && up->next->type == ELSE) n = up;
         jmptr = asm_jump(buffer, 0);
         offset2 = buffer->length;
 
@@ -1443,15 +1487,18 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
 
         puts("IF SECOND BODY");
         
-        if (up->next != NULL && up->next->type == ELSE) 
-            block(get_token_4(up, NEXT, DESC, DESC, NEXT), -1, buffer);
+        if (n->next != NULL && n->next->type == ELSE) {
+            display_elt(n->elt);
+            last = block_or_line(get_token_3_null(n->next, DESC, DESC, NEXT), n->next, -1, buffer);
+        }
+            //block(get_token_4(up, NEXT, DESC, DESC, NEXT), -1, buffer);
             
         asm_update_jump_length(jmptr, buffer, offset2);
         
-        if (up->next != NULL && up->next->type == ELSE)
-            up = up->next;
+        //if (up->next != NULL && up->next->type == ELSE)
+        //    up = up->next;
 
-        return up;
+        return last;
 
     } else if (up->type == FOR) {
 
