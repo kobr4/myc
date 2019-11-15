@@ -11,6 +11,10 @@ int main() {
 
     for (int i = 0;i == 0;i++) {
         a = a+1;
-    }    
+    }   
+
+    for (int i = 0;i < 3;i++)
+        a = a+1;
+
     return a;
 }

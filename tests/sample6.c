@@ -6,5 +6,8 @@ int main(int argc, char **argv) {
         a++;
     }
 
+    while (a < 20)
+        a++;
+
     return a;
 }

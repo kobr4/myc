@@ -1474,29 +1474,19 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
 
 
         puts("IF FIRST BODY");
+        T_NODE * last = block_or_line(get_token_5_null(up, DESC, NEXT, NEXT, DESC, NEXT), up, -1, buffer);
 
-        
-        //block(get_token_5(up, DESC, NEXT, NEXT, DESC, NEXT), -1, buffer);
-        T_NODE * n = block_or_line(get_token_5_null(up, DESC, NEXT, NEXT, DESC, NEXT), up, -1, buffer);
-        T_NODE * last = n;
-        if (up->next != NULL && up->next->type == ELSE) n = up;
         jmptr = asm_jump(buffer, 0);
         offset2 = buffer->length;
 
         asm_update_jump_length(jgptr, buffer, offset);
 
         puts("IF SECOND BODY");
-        
-        if (n->next != NULL && n->next->type == ELSE) {
-            display_elt(n->elt);
-            last = block_or_line(get_token_3_null(n->next, DESC, DESC, NEXT), n->next, -1, buffer);
+        if (last->next != NULL && last->next->type == ELSE) {
+            last = block_or_line(get_token_3_null(last->next, DESC, DESC, NEXT), last->next, -1, buffer);
         }
-            //block(get_token_4(up, NEXT, DESC, DESC, NEXT), -1, buffer);
             
         asm_update_jump_length(jmptr, buffer, offset2);
-        
-        //if (up->next != NULL && up->next->type == ELSE)
-        //    up = up->next;
 
         return last;
 
@@ -1513,13 +1503,14 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         U8 * jcondptr = asm_jump_equal(buffer, 0);        
         U32 offset3 = buffer->length;
     
-        block(get_token_4(up, DESC, NEXT, NEXT, DESC), -1, buffer);
+        T_NODE * end = block_or_line(get_token_4_null(up, DESC, NEXT, NEXT, DESC), up, -1, buffer);
+        
         line(last->next, -1, buffer);
         asm_jump(buffer, offset - buffer->length - 5);
         
         asm_update_jump_length(jcondptr, buffer, offset3);
         
-        return up;
+        return end;
         
     } else if (up->type == WHILE) {
 
@@ -1533,17 +1524,18 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         U8 * jcondptr = asm_jump_equal(buffer, 0);          
         U32 offset3 = buffer->length;
 
-        block(get_token_4(up, DESC, NEXT, NEXT, DESC), -1, buffer);
+        last = block_or_line(get_token_4_null(up, DESC, NEXT, NEXT, DESC), up, -1, buffer);
         asm_jump(buffer, offset - buffer->length - 5);
         asm_update_jump_length(jcondptr, buffer, offset3);
     
+        return last;
     } else if (up->type == DO) {
 
         U32 offset = buffer->length;
-        block(get_token_3(up, DESC, DESC, NEXT), -1, buffer);
+        T_NODE * last = block_or_line(get_token_3_null(up, DESC, DESC, NEXT), up, -1, buffer);
        
         int doffset = add_local_symbol(&anonymous_int, buffer, 1);
-        line(get_token_4(up,NEXT,DESC,DESC,NEXT), doffset, buffer);
+        line(get_token_4(last,NEXT,DESC,DESC,NEXT), doffset, buffer);
         unstack_local_symbol(buffer);
         asm_test_eax(buffer);
         U8 * jcondptr2 = asm_jump_equal(buffer, 0);              
@@ -1552,7 +1544,7 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         asm_jump(buffer, offset - buffer->length - 5);
         asm_update_jump_length(jcondptr2, buffer, offset2);
 
-        return up->next;
+        return last;
     } else if (up->type == EQ) {
 
         T_NODE * last = one(get_token(up,NEXT), stack_offset, buffer);

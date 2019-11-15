@@ -2,9 +2,9 @@ int i;
 
 int main(int argc, char **argv) {
     i = 0;
-    do {
+    do 
         i++; 
-    } while (i < 10);
+    while (i < 10);
 
     return i;
 }
