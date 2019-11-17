@@ -29,7 +29,10 @@ enum keyword {
     SUBSUB,
     WHILE,
     DO,
-    AND
+    AND,
+    BR_O,
+    BR_C,
+    CUSTOM_T
 } T_KEYWORD;
 
 typedef struct T_CTXT {
@@ -273,6 +276,8 @@ enum keyword type(T_ELT * elt) {
     else if (strncmp(elt->str, ")", elt->len) == 0) result = PAR_C;
     else if (strncmp(elt->str, "{", elt->len) == 0) result = ACC_O;
     else if (strncmp(elt->str, "}", elt->len) == 0) result = ACC_C;
+    else if (strncmp(elt->str, "[", elt->len) == 0) result = BR_O;
+    else if (strncmp(elt->str, "]", elt->len) == 0) result = BR_C;    
     else if (strncmp(elt->str, "*", elt->len) == 0) result = PTR;
     else if (strncmp(elt->str, "+", elt->len) == 0) result = ADD;
     else if (strncmp(elt->str, "-", elt->len) == 0) result = SUB;
@@ -445,6 +450,8 @@ T_ELT * tokenize(char * input,int size) {
             case '}':
             case ')':
             case '(':
+            case '[':
+            case ']':
             case ',':            
             case ';':
                 if (current_exp != -1) {
@@ -540,6 +547,7 @@ void create_node_expr(T_NODE * up, T_ELT * current) {
             break;
         case PAR_C:
         case ACC_C:
+        case BR_C:
             //ctxt.type = t_current;
             current_n = add_next_node(up->asc, current, up);
             create_node_expr(current_n->asc, current->next);
@@ -566,6 +574,7 @@ void create_node_expr(T_NODE * up, T_ELT * current) {
             break;
         case PAR_O:
         case ACC_O:
+        case BR_O:
             //ctxt.type = t_current;
             current_n = add_desc_node(up, current);
             current_n = add_desc_node(current_n, NULL);
@@ -639,7 +648,49 @@ int is_procedure_call(T_NODE * up) {
     return 0;
 }
 
+int resolve(T_NODE * node, int left) {
+    if (node == NULL) return left;
+    if (node->elt == NULL) return resolve(node->next, left);
+    if (node->type == ADD) {
+        return left + resolve(node->next, 0);
+    } 
+    if (node->type == SUB) {
+        return left - resolve(node->next, 0);
+    }
+    if (node->type == PTR) {
+        return left * resolve(node->next, 0);
+    }
+    if (is_number(node->elt)) {
+        T_ELT * elt = node->elt; 
+        char value[32];
+        for (int i = 0;i < elt->len;i++) {
+            value[i] = elt->str[i]; 
+        }
+
+        value[elt->len] = 0;
+
+        int v = atoi(value);
+        
+        if (left != 0) error_elt(elt, "Syntax error");
+
+        return resolve(node->next, v);
+    }
+
+
+    return resolve(node->next, left);
+}
+
 int variable_size(T_NODE * up) {
+    if (up->prev == NULL) {
+        if (up->type == BR_O && is_type(up->asc->prev->type)) {
+
+            int size = resolve(up->desc, 0) * variable_size(up->asc);
+
+            printf("ARRAY size = %d\n", size);
+            return size;
+        } 
+        else display_elt_ctxt("Error on variable size: ", up->elt);
+    }
     switch (up->prev->type) {
         case INT: 
             return 4;
@@ -720,14 +771,24 @@ void asm_load_al(U8 value, T_BUFFER * buffer) {
 
 //sub esp, size
 void asm_add_variable(T_NODE * up, T_BUFFER * buffer) {
-    U8 size  = variable_size(up);
+    U32 size  = variable_size(up);
     printf("[ASM][%x] sub esp, %d\n", buffer->length, size);
-    write_buffer_3(buffer, 0x83, 0xEC, size);
+    if ( (size >> 8) == 0 ) {
+        write_buffer_3(buffer, 0x83, 0xEC, size);
+    } else {
+        write_buffer_2(buffer, 0x81, 0xEC);
+        write_buffer_dword(buffer, size);
+    }
 }
 
 // mov eax, DWORD PTR SS:[esp]
 void asm_retrieve_variable_nested(int offset, T_BUFFER * buffer) {
-    write_buffer_4(buffer, 0x8B, 0x44, 0x24, offset);
+    if ( (offset >> 8) == 0 ) {
+        write_buffer_4(buffer, 0x8B, 0x44, 0x24, offset);
+    } else {
+        write_buffer_3(buffer, 0x8B, 0x84, 0x24);
+        write_buffer_dword(buffer, offset);
+    }
 }
 
 // mov ax, DWORD PTR SS:[esp]
@@ -746,7 +807,12 @@ void asm_retrieve_variable_eax(int offset, T_BUFFER * buffer) {
 // mov al, BYTE PTR SS:[esp]
 void asm_retrieve_variable_al(int offset, T_BUFFER * buffer) {
     printf("[ASM][%x] mov al, BYTE PTR SS:[esp + %d]\n", buffer->length, offset);
-    write_buffer_4(buffer, 0x8A, 0x44, 0x24, offset);
+    if ( (offset >> 8) == 0 ) {
+        write_buffer_4(buffer, 0x8A, 0x44, 0x24, offset);
+    } else {
+        write_buffer_3(buffer, 0x8A, 0x84, 0x24);
+        write_buffer_dword(buffer, offset);
+    }
 }
 
 void asm_retrieve_variable(T_NODE * n, int offset, T_BUFFER * buffer) {
@@ -818,8 +884,14 @@ void asm_retrieve_variable_mem(T_NODE * n, int offset, T_BUFFER * buffer) {
     }
 }
 
+
 void asm_add_variable_and_store_nested(int offset, T_BUFFER * buffer) {
-    write_buffer_4(buffer, 0x01, 0x44, 0x24, offset);
+    if ( (offset >> 8) == 0 ) 
+        write_buffer_4(buffer, 0x01, 0x44, 0x24, offset);
+    else {
+        write_buffer_3(buffer, 0x01, 0x84, 0x24);
+        write_buffer_dword(buffer, offset);
+    }
 }
 
 //add WORD PTR SS:[esp], ax
@@ -838,7 +910,12 @@ void asm_add_variable_and_store_eax(int offset, T_BUFFER * buffer) {
 //add BYTE PTR SS:[esp], al
 void asm_add_variable_and_store_al(int offset, T_BUFFER * buffer) {
     printf("[ASM][%x] add BYTE PTR SS:[esp + %d], al\n", buffer->length, offset);
-    write_buffer_4(buffer, 0x00, 0x44, 0x24, offset);
+    if ( (offset >> 8) == 0 ) {
+        write_buffer_4(buffer, 0x00, 0x44, 0x24, offset);
+    } else {
+        write_buffer_3(buffer, 0x00, 0x84, 0x24);
+        write_buffer_dword(buffer, offset);        
+    }
 }
 
 void asm_add_variable_and_store(T_NODE * n, int offset, T_BUFFER * buffer) {
@@ -861,7 +938,12 @@ void asm_add_variable_and_store(T_NODE * n, int offset, T_BUFFER * buffer) {
 
 //sub DWORD PTR SS:[esp], eax
 void asm_sub_variable_and_store_nested(int offset, T_BUFFER * buffer) {
-    write_buffer_4(buffer, 0x29, 0x44, 0x24, offset);
+    if ( (offset >> 8) == 0 ) {
+        write_buffer_4(buffer, 0x29, 0x44, 0x24, offset);
+    } else {
+        write_buffer_3(buffer, 0x29, 0x84, 0x24);
+        write_buffer_dword(buffer, offset); 
+    }
 }
 
 //sub WORD PTR SS:[esp], eax
@@ -880,7 +962,12 @@ void asm_sub_variable_and_store_ax(int offset, T_BUFFER * buffer) {
 //sub BYTE PTR SS:[esp], al
 void asm_sub_variable_and_store_al(int offset, T_BUFFER * buffer) {
     printf("[ASM][%x] sub BYTE PTR SS:[esp + %d], al\n", buffer->length, offset);
-    write_buffer_4(buffer, 0x28, 0x44, 0x24, offset);
+    if ( (offset >> 8) == 0 ) {
+        write_buffer_4(buffer, 0x28, 0x44, 0x24, offset);
+    } else {
+        write_buffer_3(buffer, 0x28, 0x84, 0x24);
+        write_buffer_dword(buffer, offset); 
+    }
 }
 
 void asm_sub_variable_and_store(T_NODE * n, int offset, T_BUFFER * buffer) {
@@ -924,20 +1011,35 @@ void asm_add_eax_value(T_BUFFER * buffer, int value) {
 //mov WORD PTR SS:[esp], al
 void asm_store_variable_al(int offset, T_BUFFER * buffer) {
     printf("[ASM][%x] mov BYTE PTR SS:[esp + %d], al\n", buffer->length, offset);
-    write_buffer_4(buffer, 0x88, 0x44, 0x24, offset);    
+    if ( (offset >> 8) == 0 ) {
+        write_buffer_4(buffer, 0x88, 0x44, 0x24, offset);
+    } else {
+        write_buffer_3(buffer, 0x88, 0x84, 0x24);
+        write_buffer_dword(buffer, offset);
+    }    
 }
 
-//mov DWORD PTR SS:[esp], eax
+//mov DWORD PTR SS:[esp], ax
 void asm_store_variable_ax(int offset, T_BUFFER * buffer) {
     printf("[ASM][%x] mov DWORD PTR SS:[esp + %d], ax\n", buffer->length, offset);
-    write_buffer_4(buffer, 0x66, 0x89, 0x44, 0x24);
-    buffer->buffer[buffer->length++] = offset;
+    if ( (offset >> 8) == 0 ) {
+        write_buffer_4(buffer, 0x66, 0x89, 0x44, 0x24);
+        buffer->buffer[buffer->length++] = offset;
+    } else {
+        write_buffer_4(buffer, 0x66, 0x89, 0x84, 0x24);
+        write_buffer_dword(buffer, offset);       
+    }
 }
 
 //mov DWORD PTR SS:[esp], eax
 void asm_store_variable_eax(int offset, T_BUFFER * buffer) {
     printf("[ASM][%x] mov DWORD PTR SS:[esp + %d], eax\n", buffer->length, offset);
-    write_buffer_4(buffer, 0x89, 0x44, 0x24, offset);
+    if ( (offset >> 8) == 0 ) {
+        write_buffer_4(buffer, 0x89, 0x44, 0x24, offset);
+    } else {
+        write_buffer_3(buffer, 0x89, 0x84, 0x24);
+        write_buffer_dword(buffer, offset);  
+    }
 }
 
 void asm_store_variable(T_NODE * n, int offset, T_BUFFER * buffer) {
@@ -999,9 +1101,14 @@ void asm_store_variable_mem(T_NODE * n, int offset, T_BUFFER * buffer) {
 }
 
 //add esp, size
-void asm_remove_variable(T_BUFFER * buffer, U8 size) {
-    printf("[ASM][%x] add esp, %d\n", buffer->length, size);  
-    write_buffer_3(buffer, 0x83, 0xC4, size);
+void asm_remove_variable(T_BUFFER * buffer, U32 size) {
+    printf("[ASM][%x] add esp, %d\n", buffer->length, size); 
+    if ( (size >> 8) == 0 ) { 
+        write_buffer_3(buffer, 0x83, 0xC4, size);
+    } else {
+        write_buffer_2(buffer, 0x81, 0xC4);
+        write_buffer_dword(buffer, size);
+    }
 }
 
 //ret
@@ -1018,10 +1125,23 @@ void asm_call(T_BUFFER * buffer, U32 addr) {
     write_buffer_dword(buffer, addr);
 }
 
+//imul eax, value
+void asm_imul_eax_value(T_BUFFER * buffer, U32 value) {
+    printf("[ASM][%x] imul eax, %d\n", buffer->length, value);
+    write_buffer_2(buffer, 0x69, 0xC0);    
+    write_buffer_dword(buffer, value);
+}
+
 //mov ebx, eax
 void asm_mov_ebx_eax(T_BUFFER * buffer) {
     printf("[ASM][%x] mov ebx, eax\n", buffer->length);
     write_buffer_2(buffer, 0x89, 0xC3);    
+}
+
+//add ebx, eax
+void asm_add_ebx_eax(T_BUFFER * buffer) {
+    printf("[ASM][%x] add ebx, eax\n", buffer->length);
+    write_buffer_2(buffer, 0x01, 0xC3);    
 }
 
 //cmp eax, ebx
@@ -1202,6 +1322,12 @@ T_NODE * proc_lookup(T_NODE * up, T_NODE * target) {
 T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer);
 
 int add_local_symbol(T_NODE * up, T_BUFFER * buffer, char is_anon) {
+
+    if (up->desc != NULL && up->desc->type == BR_O) {
+        
+        add_local_symbol(up->desc, buffer, 1);
+    }
+   
     asm_add_variable(up, buffer);
     if (!is_anon)
         buffer->local_symbol[buffer->local_symbol_count++] = up;
@@ -1217,10 +1343,22 @@ int add_local_symbol(T_NODE * up, T_BUFFER * buffer, char is_anon) {
                 buffer->local_symbol[buffer->local_symbol_count++] = &anonymous_int;
                 break;
             default:
+                buffer->local_symbol[buffer->local_symbol_count++] = up;
+                //error_elt(up->elt, "Unable to add local symbol.");
                 break;
         }
         
     }
+
+    if (up->desc != NULL && up->desc->type == BR_O) {
+        //Setting array pointer value for main symbol
+        asm_mov_eax_esp(buffer);
+        asm_add_eax_value(buffer, 4);
+        asm_store_variable_eax(get_variable_offset(up, buffer), buffer);
+
+    }
+
+
     return buffer->local_symbol_count - 1;
 }
 
@@ -1332,8 +1470,6 @@ void parameter_scan(T_NODE * up, T_BUFFER * buffer) {
     parameter_scan(up->next, buffer);
 }
 
-
-
 T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
     display_elt_ctxt("STEP: ", up->elt);    
 
@@ -1354,7 +1490,8 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         value[elt->len] = 0;
 
         int v = atoi(value);
-    
+        
+        
         asm_load_eax(v, buffer);
         return up;
 
@@ -1389,12 +1526,40 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
                 if (up->prev != NULL && up->prev->type == PTR) {
                     puts("Indirect retrive");
                     asm_mov_ebx_eax(buffer);
-                    asm_mov_eax_ebx_addr(buffer);;
-                }            
+                    asm_mov_eax_ebx_addr(buffer);
+                } else if (up->desc != NULL && up->desc->type == BR_O) {
+                    puts("Array retrieve");
+                    asm_mov_ebx_eax(buffer);
+                    line(up->desc->desc->next, doffset, buffer);
+                    asm_imul_eax_value(buffer, variable_size(buffer->local_symbol[doffset]));
+                    asm_add_ebx_eax(buffer);
+                    asm_mov_eax_ebx_addr(buffer);
+                    //asm_mov_eax_ebx_addr(buffer);
+
+                }     
             }
             
             if (stack_offset == -1) {
-                last = line(up->next, doffset, buffer);
+
+                if (up->desc != NULL && up->desc->type == BR_O) {
+                    asm_retrieve_variable(buffer->local_symbol[doffset], get_variable_offset(up, buffer), buffer);
+                    
+                    puts("Array assign init");
+                    int local_offset = add_local_symbol(&anonymous_int, buffer, 1);
+                    asm_store_variable(&anonymous_int, get_variable_dynamic_offset(local_offset, buffer), buffer);
+                    
+                    line(up->desc->desc->next, local_offset, buffer);
+                    asm_imul_eax_value(buffer, variable_size(buffer->local_symbol[doffset]));
+                    asm_add_variable_and_store(&anonymous_int, get_variable_dynamic_offset(local_offset, buffer), buffer);
+
+                    last = line(up->next, local_offset, buffer);
+
+                    unstack_local_symbol(buffer);
+                } else {
+                    
+                    last = line(up->next, doffset, buffer);
+                    
+                }
             } 
             
         } else {
@@ -1552,6 +1717,10 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
             puts("INDIRECT STORE");
             asm_retrieve_variable_ebx(get_variable_dynamic_offset(stack_offset, buffer), buffer);
             asm_mov_ebx_addr_eax(buffer);
+        } else if (up->prev->desc != NULL && up->prev->desc->type == BR_O ) {
+            puts("INDIRECT STORE OF ARRAY");
+            asm_retrieve_variable_ebx(get_variable_dynamic_offset(stack_offset, buffer), buffer);
+            asm_mov_ebx_addr_eax(buffer);
         } else {
             asm_store_variable(buffer->local_symbol[stack_offset], get_variable_dynamic_offset(stack_offset, buffer), buffer);
         }
@@ -1587,6 +1756,8 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         return up->next;
     } else if (up->type == PTR) {
         return one(up->next, stack_offset, buffer);
+    } else if (up->type == BR_O) {
+        return up->next;
     }
 
     
