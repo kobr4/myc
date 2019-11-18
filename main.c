@@ -1600,9 +1600,7 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
 
                     unstack_local_symbol(buffer);
                     
-                } else {
-                    //last = line(up->next, doffset, buffer);
-                }
+                } 
             } 
             
         } else {
