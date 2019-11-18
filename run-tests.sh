@@ -197,3 +197,17 @@ then
 else 
     echo -e "$ITEM [\e[31mFAILED\e[0m]"
 fi
+
+SOURCE="sample14.c"
+ITEM="14: $SOURCE"
+
+./main tests/$SOURCE > /dev/null
+COMPIL=$?
+$OUTBIN
+RUN=$?
+if [ $COMPIL = "0" ] && [ $RUN = "51" ] 
+then
+    echo -e "$ITEM [\e[92mPASSED\e[0m]"
+else 
+    echo -e "$ITEM [\e[31mFAILED\e[0m]"
+fi
