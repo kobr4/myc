@@ -1489,8 +1489,7 @@ void stack_parameters(T_NODE * up, T_BUFFER * buffer, T_NODE * proc, int count) 
         display_elt_ctxt("found arg: ", n->elt);
 
         int doffset = add_local_symbol(n->next, buffer, 1);
-        
-        one(up, doffset, buffer);
+        one(up, -1, buffer);
         asm_store_variable(n->next, get_variable_dynamic_offset(doffset, buffer), buffer);
         if (up->next != NULL)
             line(up->next, doffset, buffer);
@@ -1602,7 +1601,7 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
                     unstack_local_symbol(buffer);
                     
                 } else {
-                    last = line(up->next, doffset, buffer);
+                    //last = line(up->next, doffset, buffer);
                 }
             } 
             
@@ -1791,7 +1790,26 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         return last;
     } else if (up->type == EQ) {
 
-        T_NODE * last = one(get_token(up,NEXT), stack_offset, buffer);
+        
+        T_NODE * last = one(get_token(up,NEXT), -1, buffer);
+     
+         if (stack_offset == -1) {
+            stack_offset = get_variable_dynamic_offset_from_symbol(up->prev, buffer);
+        }    
+
+        if (last != NULL && last->next != NULL && last->next->type != END) {
+            
+            int doffset = add_local_symbol(buffer->local_symbol[stack_offset], buffer, 1);
+            asm_store_variable(buffer->local_symbol[doffset],get_variable_dynamic_offset(doffset, buffer), buffer);
+        
+            last = line(last->next, doffset, buffer);
+            
+            asm_retrieve_variable(buffer->local_symbol[doffset], get_variable_dynamic_offset(doffset, buffer), buffer);     
+            unstack_local_symbol(buffer);
+        }
+           
+
+
         if (is_pointer_access(up->prev) && (up->prev->prev->prev == NULL || !is_type(up->prev->prev->prev->type))) {
             puts("INDIRECT STORE");
             asm_retrieve_variable_ebx(get_variable_dynamic_offset(stack_offset, buffer), buffer);
@@ -1817,10 +1835,18 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         return last;
     } else if (up->type == ADDADD) {
         asm_load_eax(1, buffer);
+        if (stack_offset == -1) {
+            stack_offset = get_variable_dynamic_offset_from_symbol(up->prev, buffer);
+        } 
+
         asm_add_variable_and_store(buffer->local_symbol[stack_offset], get_variable_dynamic_offset(stack_offset, buffer), buffer);
         return up;
     } else if (up->type == SUBSUB) {
         asm_load_eax(1, buffer);
+        if (stack_offset == -1) {
+            stack_offset = get_variable_dynamic_offset_from_symbol(up->prev, buffer);
+        } 
+
         asm_sub_variable_and_store(buffer->local_symbol[stack_offset], get_variable_dynamic_offset(stack_offset, buffer), buffer);
         return up;
     } else if (up->type == AND) {
