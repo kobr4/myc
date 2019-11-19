@@ -233,7 +233,7 @@ ITEM="16: $SOURCE"
 COMPIL=$?
 $OUTBIN
 RUN=$?
-if [ $COMPIL = "0" ] && [ $RUN = "51" ] 
+if [ $COMPIL = "0" ] && [ $RUN = "52" ] 
 then
     echo -e "$ITEM [\e[92mPASSED\e[0m]"
 else 
