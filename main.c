@@ -193,6 +193,7 @@ T_ELT elt_int;
 T_NODE anonymous_int;
 T_NODE anonymous_short;
 T_NODE anonymous_char;
+int START = ELF_ENTRY_VADDR + sizeof(T_ELF) + sizeof(T_ELF_PRG32_HDR);
 
 T_ELF_PRG32_HDR elf32_prg_hdr = {
     PT_LOAD,
@@ -617,8 +618,31 @@ int is_end(enum keyword k) {
     }
 }
 
+int type_size(enum keyword k) {
+    switch(k) {
+        case INT: return 4;
+        case SHORT: return 2;
+        case CHAR: return 1;
+        case PTR: return 4;
+        default : error("Invalid type for type_size()");
+        break;
+    }
+    return -1;
+}
+
+int is_pointer_access(T_NODE * n) {
+    if (n->prev != NULL && n->prev->type == PTR) return 1;
+    else return 0;
+}
+
+int is_array_access(T_NODE * n) {
+    if (n->desc != NULL && n->desc->type == BR_O) return 1;
+    else return 0;
+}
+
 int is_matching(T_NODE * nodeA, T_NODE * nodeB) {
     if ( nodeA == NULL || nodeA->elt == NULL) return 0;
+    if ( nodeB == NULL || nodeB->elt == NULL) return 0;
 
    int minlen = (nodeA->elt->len > nodeB->elt->len)? nodeA->elt->len: nodeB->elt->len;
 
@@ -684,12 +708,16 @@ int variable_size(T_NODE * up) {
     if (up->prev == NULL) {
         if (up->type == BR_O && is_type(up->asc->prev->type)) {
 
-            int size = resolve(up->desc, 0) * variable_size(up->asc);
+            int size = resolve(up->desc, 0) * type_size(up->asc->prev->type);
 
             printf("ARRAY size = %d\n", size);
             return size;
         } 
         else display_elt_ctxt("Error on variable size: ", up->elt);
+    }
+
+    if (is_array_access(up)) {
+        return 4;
     }
     switch (up->prev->type) {
         case INT: 
@@ -742,21 +770,21 @@ void write_buffer_dword(T_BUFFER * buffer, U32 value) {
 
 // mov EAX, value
 void asm_load_eax(U32 value, T_BUFFER * buffer) {
-    printf("[ASM][%x] mov eax,  %d\n", buffer->length, value);
+    printf("[ASM][%x] mov eax,  %d\n", buffer->length+START, value);
     buffer->buffer[buffer->length++] = 0xB8; 
     write_buffer_dword(buffer, value);
 } 
 
 // mov EBX, value
 void asm_load_ebx(U32 value, T_BUFFER * buffer) {
-    printf("[ASM][%x] mov ebx,  %d\n", buffer->length, value);
+    printf("[ASM][%x] mov ebx,  %d\n", buffer->length+START, value);
     buffer->buffer[buffer->length++] = 0xBB; 
     write_buffer_dword(buffer, value);
 } 
 
 // mov AX, value
 void asm_load_ax(U16 value, T_BUFFER * buffer) {
-    printf("[ASM][%x] mov ax,  %d\n", buffer->length, value);
+    printf("[ASM][%x] mov ax,  %d\n", buffer->length+START, value);
     write_buffer_2(buffer, 0x66, 0xB8);
     memcpy( &(buffer->buffer[buffer->length]), &value , sizeof(value));
     buffer->length += 2;
@@ -764,7 +792,7 @@ void asm_load_ax(U16 value, T_BUFFER * buffer) {
 
 // mov AL, value
 void asm_load_al(U8 value, T_BUFFER * buffer) {
-    printf("[ASM][%x] mov ax,  %d\n", buffer->length, value);
+    printf("[ASM][%x] mov ax,  %d\n", buffer->length+START, value);
     write_buffer_2(buffer, 0xB0, value);
 } 
 
@@ -772,7 +800,7 @@ void asm_load_al(U8 value, T_BUFFER * buffer) {
 //sub esp, size
 void asm_add_variable(T_NODE * up, T_BUFFER * buffer) {
     U32 size  = variable_size(up);
-    printf("[ASM][%x] sub esp, %d\n", buffer->length, size);
+    printf("[ASM][%x] sub esp, %d\n", buffer->length+START, size);
     if ( (size >> 8) == 0 ) {
         write_buffer_3(buffer, 0x83, 0xEC, size);
     } else {
@@ -793,20 +821,20 @@ void asm_retrieve_variable_nested(int offset, T_BUFFER * buffer) {
 
 // mov ax, DWORD PTR SS:[esp]
 void asm_retrieve_variable_ax(int offset, T_BUFFER * buffer) {
-    printf("[ASM][%x] mov ax, WORD PTR SS:[esp + %d]\n", buffer->length, offset);
+    printf("[ASM][%x] mov ax, WORD PTR SS:[esp + %d]\n", buffer->length+START, offset);
     buffer->buffer[buffer->length++] = 0x66;
     asm_retrieve_variable_nested(offset, buffer);
 }
 
 // mov eax, DWORD PTR SS:[esp]
 void asm_retrieve_variable_eax(int offset, T_BUFFER * buffer) {
-    printf("[ASM][%x] mov eax, DWORD PTR SS:[esp + %d]\n", buffer->length, offset);
+    printf("[ASM][%x] mov eax, DWORD PTR SS:[esp + %d]\n", buffer->length+START, offset);
     asm_retrieve_variable_nested(offset, buffer);
 }
 
 // mov al, BYTE PTR SS:[esp]
 void asm_retrieve_variable_al(int offset, T_BUFFER * buffer) {
-    printf("[ASM][%x] mov al, BYTE PTR SS:[esp + %d]\n", buffer->length, offset);
+    printf("[ASM][%x] mov al, BYTE PTR SS:[esp + %d]\n", buffer->length+START, offset);
     if ( (offset >> 8) == 0 ) {
         write_buffer_4(buffer, 0x8A, 0x44, 0x24, offset);
     } else {
@@ -835,8 +863,15 @@ void asm_retrieve_variable(T_NODE * n, int offset, T_BUFFER * buffer) {
 
 // mov ebx, DWORD PTR SS:[esp]
 void asm_retrieve_variable_ebx(int offset, T_BUFFER * buffer) {
-    printf("[ASM][%x] mov ebx, DWORD PTR SS:[esp + %d]\n", buffer->length, offset);
+    printf("[ASM][%x] mov ebx, DWORD PTR SS:[esp + %d]\n", buffer->length+START, offset);
     write_buffer_4(buffer, 0x8B, 0x5C, 0x24, offset);
+}
+
+// mov ebx, [offset]
+void asm_retrieve_variable_ebx_mem(int offset, T_BUFFER * buffer) {
+    printf("[ASM][%x] mov ebx, [%x]\n", buffer->length+START, offset);
+    write_buffer_2(buffer, 0x8B, 0x1D);
+    write_buffer_dword(buffer, offset);
 }
 
 //MEM
@@ -848,20 +883,20 @@ void asm_retrieve_variable_nested_mem(int offset, T_BUFFER * buffer) {
 
 // mov ax, [offset]
 void asm_retrieve_variable_ax_mem(int offset, T_BUFFER * buffer) {
-    printf("[ASM][%x] mov ax, [%x]\n", buffer->length, offset);
+    printf("[ASM][%x] mov ax, [%x]\n", buffer->length+START, offset);
     buffer->buffer[buffer->length++] = 0x66;
     asm_retrieve_variable_nested_mem(offset, buffer);
 }
 
 // mov eax, [offset]
 void asm_retrieve_variable_eax_mem(int offset, T_BUFFER * buffer) {
-    printf("[ASM][%x] mov eax, [%x]\n", buffer->length, offset);
+    printf("[ASM][%x] mov eax, [%x]\n", buffer->length+START, offset);
     asm_retrieve_variable_nested_mem(offset, buffer);
 }
 
 // mov al, [offset]
 void asm_retrieve_variable_al_mem(int offset, T_BUFFER * buffer) {
-    printf("[ASM][%x] mov al, [%x]\n", buffer->length, offset);
+    printf("[ASM][%x] mov al, [%x]\n", buffer->length+START, offset);
     buffer->buffer[buffer->length++] = 0xA0;
     write_buffer_dword(buffer, offset);
 }
@@ -896,20 +931,20 @@ void asm_add_variable_and_store_nested(int offset, T_BUFFER * buffer) {
 
 //add WORD PTR SS:[esp], ax
 void asm_add_variable_and_store_ax(int offset, T_BUFFER * buffer) {
-    printf("[ASM][%x] add WORD PTR SS:[esp + %d], ax\n", buffer->length, offset);
+    printf("[ASM][%x] add WORD PTR SS:[esp + %d], ax\n", buffer->length+START, offset);
     buffer->buffer[buffer->length++] = 0x66;
     asm_add_variable_and_store_nested(offset, buffer);
 }
 
 //add DWORD PTR SS:[esp], eax
 void asm_add_variable_and_store_eax(int offset, T_BUFFER * buffer) {
-    printf("[ASM][%x] add DWORD PTR SS:[esp + %d], eax\n", buffer->length, offset);
+    printf("[ASM][%x] add DWORD PTR SS:[esp + %d], eax\n", buffer->length+START, offset);
     asm_add_variable_and_store_nested(offset, buffer);
 }
 
 //add BYTE PTR SS:[esp], al
 void asm_add_variable_and_store_al(int offset, T_BUFFER * buffer) {
-    printf("[ASM][%x] add BYTE PTR SS:[esp + %d], al\n", buffer->length, offset);
+    printf("[ASM][%x] add BYTE PTR SS:[esp + %d], al\n", buffer->length+START, offset);
     if ( (offset >> 8) == 0 ) {
         write_buffer_4(buffer, 0x00, 0x44, 0x24, offset);
     } else {
@@ -948,20 +983,20 @@ void asm_sub_variable_and_store_nested(int offset, T_BUFFER * buffer) {
 
 //sub WORD PTR SS:[esp], eax
 void asm_sub_variable_and_store_eax(int offset, T_BUFFER * buffer) {
-    printf("[ASM][%x] sub DWORD PTR SS:[esp + %d], eax\n", buffer->length, offset);
+    printf("[ASM][%x] sub DWORD PTR SS:[esp + %d], eax\n", buffer->length+START, offset);
     asm_sub_variable_and_store_nested(offset, buffer);
 }
 
 //sub WORD PTR SS:[esp], ax
 void asm_sub_variable_and_store_ax(int offset, T_BUFFER * buffer) {
-    printf("[ASM][%x] sub WORD PTR SS:[esp + %d], ax\n", buffer->length, offset);
+    printf("[ASM][%x] sub WORD PTR SS:[esp + %d], ax\n", buffer->length+START, offset);
     buffer->buffer[buffer->length++] = 0x66;
     asm_sub_variable_and_store_nested(offset, buffer);
 }
 
 //sub BYTE PTR SS:[esp], al
 void asm_sub_variable_and_store_al(int offset, T_BUFFER * buffer) {
-    printf("[ASM][%x] sub BYTE PTR SS:[esp + %d], al\n", buffer->length, offset);
+    printf("[ASM][%x] sub BYTE PTR SS:[esp + %d], al\n", buffer->length+START, offset);
     if ( (offset >> 8) == 0 ) {
         write_buffer_4(buffer, 0x28, 0x44, 0x24, offset);
     } else {
@@ -989,28 +1024,28 @@ void asm_sub_variable_and_store(T_NODE * n, int offset, T_BUFFER * buffer) {
 
 //mov eax, esp
 void asm_mov_eax_esp(T_BUFFER * buffer) {
-    printf("[ASM][%x] mov eax, esp\n", buffer->length);
+    printf("[ASM][%x] mov eax, esp\n", buffer->length+START);
     write_buffer_2(buffer, 0x89, 0xE0);
 }
 
 
 //sub eax, value
 void asm_sub_eax_value(T_BUFFER * buffer, int value) {
-    printf("[ASM][%x] sub eax, %d\n", buffer->length, value);    
+    printf("[ASM][%x] sub eax, %d\n", buffer->length+START, value);    
     buffer->buffer[buffer->length++] = 0x2D;
     write_buffer_dword(buffer, value);
 }
 
 //add eax, value
 void asm_add_eax_value(T_BUFFER * buffer, int value) {
-    printf("[ASM][%x] add eax, %d\n", buffer->length, value);  
+    printf("[ASM][%x] add eax, %d\n", buffer->length+START, value);  
     buffer->buffer[buffer->length++] = 0x05;
     write_buffer_dword(buffer, value);
 }
 
 //mov WORD PTR SS:[esp], al
 void asm_store_variable_al(int offset, T_BUFFER * buffer) {
-    printf("[ASM][%x] mov BYTE PTR SS:[esp + %d], al\n", buffer->length, offset);
+    printf("[ASM][%x] mov BYTE PTR SS:[esp + %d], al\n", buffer->length+START, offset);
     if ( (offset >> 8) == 0 ) {
         write_buffer_4(buffer, 0x88, 0x44, 0x24, offset);
     } else {
@@ -1021,7 +1056,7 @@ void asm_store_variable_al(int offset, T_BUFFER * buffer) {
 
 //mov DWORD PTR SS:[esp], ax
 void asm_store_variable_ax(int offset, T_BUFFER * buffer) {
-    printf("[ASM][%x] mov DWORD PTR SS:[esp + %d], ax\n", buffer->length, offset);
+    printf("[ASM][%x] mov DWORD PTR SS:[esp + %d], ax\n", buffer->length+START, offset);
     if ( (offset >> 8) == 0 ) {
         write_buffer_4(buffer, 0x66, 0x89, 0x44, 0x24);
         buffer->buffer[buffer->length++] = offset;
@@ -1033,7 +1068,7 @@ void asm_store_variable_ax(int offset, T_BUFFER * buffer) {
 
 //mov DWORD PTR SS:[esp], eax
 void asm_store_variable_eax(int offset, T_BUFFER * buffer) {
-    printf("[ASM][%x] mov DWORD PTR SS:[esp + %d], eax\n", buffer->length, offset);
+    printf("[ASM][%x] mov DWORD PTR SS:[esp + %d], eax\n", buffer->length+START, offset);
     if ( (offset >> 8) == 0 ) {
         write_buffer_4(buffer, 0x89, 0x44, 0x24, offset);
     } else {
@@ -1062,14 +1097,14 @@ void asm_store_variable(T_NODE * n, int offset, T_BUFFER * buffer) {
 //MEM
 //mov [offset], al
 void asm_store_variable_al_mem(int offset, T_BUFFER * buffer) {
-    printf("[ASM][%x] mov [%x], al\n", buffer->length, offset);
+    printf("[ASM][%x] mov [%x], al\n", buffer->length+START, offset);
     buffer->buffer[buffer->length++] = 0xA2;
     write_buffer_dword(buffer, offset);
 }
 
 //mov [offset], ax
 void asm_store_variable_ax_mem(int offset, T_BUFFER * buffer) {
-    printf("[ASM][%x] mov [%x], ax\n", buffer->length, offset);
+    printf("[ASM][%x] mov [%x], ax\n", buffer->length+START, offset);
     buffer->buffer[buffer->length++] = 0x66;
     buffer->buffer[buffer->length++] = 0xA3;
     write_buffer_dword(buffer, offset);
@@ -1077,7 +1112,7 @@ void asm_store_variable_ax_mem(int offset, T_BUFFER * buffer) {
 
 //mov [offset], eax
 void asm_store_variable_eax_mem(int offset, T_BUFFER * buffer) {
-    printf("[ASM][%x] mov [%x], eax\n", buffer->length, offset);
+    printf("[ASM][%x] mov [%x], eax\n", buffer->length+START, offset);
     buffer->buffer[buffer->length++] = 0xA3;
     write_buffer_dword(buffer, offset);
 }
@@ -1102,7 +1137,8 @@ void asm_store_variable_mem(T_NODE * n, int offset, T_BUFFER * buffer) {
 
 //add esp, size
 void asm_remove_variable(T_BUFFER * buffer, U32 size) {
-    printf("[ASM][%x] add esp, %d\n", buffer->length, size); 
+    if (size == 0) return;
+    printf("[ASM][%x] add esp, %d\n", buffer->length+START, size); 
     if ( (size >> 8) == 0 ) { 
         write_buffer_3(buffer, 0x83, 0xC4, size);
     } else {
@@ -1113,46 +1149,46 @@ void asm_remove_variable(T_BUFFER * buffer, U32 size) {
 
 //ret
 void asm_ret(T_BUFFER * buffer) {
-    printf("[ASM][%x] ret\n", buffer->length);
+    printf("[ASM][%x] ret\n", buffer->length+START);
     buffer->buffer[buffer->length++] = 0xC3;
 }
 
 //call [addr]
 void asm_call(T_BUFFER * buffer, U32 addr) {
     addr = addr - 5;
-    printf("[ASM][%x] call %x\n",buffer->length, addr);
+    printf("[ASM][%x] call %x\n",buffer->length+START, addr);
     buffer->buffer[buffer->length++] = 0xE8; 
     write_buffer_dword(buffer, addr);
 }
 
 //imul eax, value
 void asm_imul_eax_value(T_BUFFER * buffer, U32 value) {
-    printf("[ASM][%x] imul eax, %d\n", buffer->length, value);
+    printf("[ASM][%x] imul eax, %d\n", buffer->length+START, value);
     write_buffer_2(buffer, 0x69, 0xC0);    
     write_buffer_dword(buffer, value);
 }
 
 //mov ebx, eax
 void asm_mov_ebx_eax(T_BUFFER * buffer) {
-    printf("[ASM][%x] mov ebx, eax\n", buffer->length);
+    printf("[ASM][%x] mov ebx, eax\n", buffer->length+START);
     write_buffer_2(buffer, 0x89, 0xC3);    
 }
 
 //add ebx, eax
 void asm_add_ebx_eax(T_BUFFER * buffer) {
-    printf("[ASM][%x] add ebx, eax\n", buffer->length);
+    printf("[ASM][%x] add ebx, eax\n", buffer->length+START);
     write_buffer_2(buffer, 0x01, 0xC3);    
 }
 
 //cmp eax, ebx
 void asm_cmp_eax_ebx(T_BUFFER * buffer) {
-    printf("[ASM][%x] cmp eax, ebx\n", buffer->length);
+    printf("[ASM][%x] cmp eax, ebx\n", buffer->length+START);
     write_buffer_2(buffer, 0x39, 0xD8);          
 }
 
 //jg addr
 U8 * asm_jump_greater(T_BUFFER * buffer, U32 addr) {
-    printf("[ASM][%x] jg %x\n",buffer->length, addr);
+    printf("[ASM][%x] jg %x\n",buffer->length+START, addr);
     write_buffer_2(buffer, 0x0F, 0x8F); 
     write_buffer_dword(buffer, addr);
     return &(buffer->buffer[buffer->length - 4]);    
@@ -1160,7 +1196,7 @@ U8 * asm_jump_greater(T_BUFFER * buffer, U32 addr) {
 
 //jge addr
 U8 * asm_jump_greater_eq(T_BUFFER * buffer, U32 addr) {
-    printf("[ASM][%x] jg %x\n",buffer->length, addr);
+    printf("[ASM][%x] jg %x\n",buffer->length+START, addr);
     write_buffer_2(buffer, 0x0F, 0x8D);
     write_buffer_dword(buffer, addr);
     return &(buffer->buffer[buffer->length - 4]);
@@ -1169,7 +1205,7 @@ U8 * asm_jump_greater_eq(T_BUFFER * buffer, U32 addr) {
 
 //jl addr
 U8 * asm_jump_less(T_BUFFER * buffer, int addr) {
-    printf("[ASM][%x] jl %x\n",buffer->length, addr);
+    printf("[ASM][%x] jl %x\n",buffer->length+START, addr);
     write_buffer_2(buffer, 0x0F, 0x8C);
     write_buffer_dword(buffer, addr);
     return &(buffer->buffer[buffer->length - 4]);    
@@ -1177,7 +1213,7 @@ U8 * asm_jump_less(T_BUFFER * buffer, int addr) {
 
 //jle addr
 U8 * asm_jump_less_eq(T_BUFFER * buffer, int addr) {
-    printf("[ASM][%x] jl %x\n",buffer->length, addr);
+    printf("[ASM][%x] jl %x\n",buffer->length+START, addr);
     write_buffer_2(buffer, 0x0F, 0x8E);
     write_buffer_dword(buffer, addr);
     return &(buffer->buffer[buffer->length - 4]);
@@ -1185,7 +1221,7 @@ U8 * asm_jump_less_eq(T_BUFFER * buffer, int addr) {
 
 //je addr
 U8 * asm_jump_equal(T_BUFFER * buffer, U32 addr) {
-    printf("[ASM][%x] je %x\n",buffer->length, addr);
+    printf("[ASM][%x] je %x\n",buffer->length+START, addr);
     write_buffer_2(buffer, 0x0F, 0x84);
     write_buffer_dword(buffer, addr);
     return &(buffer->buffer[buffer->length - 4]);    
@@ -1193,7 +1229,7 @@ U8 * asm_jump_equal(T_BUFFER * buffer, U32 addr) {
 
 //jne addr
 U8 * asm_jump_not_equal(T_BUFFER * buffer, U32 addr) {
-    printf("[ASM][%x] jne %x\n",buffer->length, addr);
+    printf("[ASM][%x] jne %x\n",buffer->length+START, addr);
     write_buffer_2(buffer, 0x0F, 0x85);
     write_buffer_dword(buffer, addr);
     return &(buffer->buffer[buffer->length - 4]);
@@ -1202,7 +1238,7 @@ U8 * asm_jump_not_equal(T_BUFFER * buffer, U32 addr) {
 
 //jmp addr
 U8 * asm_jump(T_BUFFER * buffer, int addr) {
-    printf("[ASM][%x] jmp %x\n",buffer->length, addr);
+    printf("[ASM][%x] jmp %x\n",buffer->length+START, addr);
     buffer->buffer[buffer->length++] = 0xE9;
     write_buffer_dword(buffer, addr);
     return &(buffer->buffer[buffer->length - 4]);
@@ -1210,21 +1246,85 @@ U8 * asm_jump(T_BUFFER * buffer, int addr) {
 
 //test eax
 void asm_test_eax(T_BUFFER * buffer) {
-    printf("[ASM][%x] test eax, eax\n", buffer->length);
+    printf("[ASM][%x] test eax, eax\n", buffer->length+START);
     write_buffer_2(buffer, 0x85, 0xC0);    
+}
+
+//mov al, [ebx]
+void asm_mov_al_ebx_addr(T_BUFFER * buffer) {
+    printf("[ASM][%x] mov al, (ebx)\n", buffer->length+START);
+    write_buffer_2(buffer, 0x8A, 0x03);
+}
+
+//mov ax, [ebx]
+void asm_mov_ax_ebx_addr(T_BUFFER * buffer) {
+    printf("[ASM][%x] mov ax, (ebx)\n", buffer->length+START);
+    write_buffer_3(buffer, 0x66, 0x8B, 0x03);
 }
 
 //mov eax, [ebx]
 void asm_mov_eax_ebx_addr(T_BUFFER * buffer) {
-    printf("[ASM][%x] mov eax, (ebx)\n", buffer->length);
+    printf("[ASM][%x] mov eax, (ebx)\n", buffer->length+START);
     write_buffer_2(buffer, 0x8B, 0x03);
+}
+
+void asm_retrieve_variable_indirect_vs(int varsize, T_BUFFER * buffer) {
+    switch(varsize) {
+        case 1:
+            asm_mov_al_ebx_addr(buffer);
+            break;
+        case 2:
+            asm_mov_ax_ebx_addr(buffer);
+            break;
+        case 4: 
+            asm_mov_eax_ebx_addr(buffer);
+            break;
+        default:
+            error("Unsupported variable size");
+            break;
+    }
+}
+
+
+//mov [ebx], al
+void asm_mov_ebx_addr_al(T_BUFFER * buffer) {
+    printf("[ASM][%x] mov (ebx), al\n", buffer->length+START);
+    write_buffer_2(buffer, 0x88, 0x03);
+}
+
+//mov [ebx], ax
+void asm_mov_ebx_addr_ax(T_BUFFER * buffer) {
+    printf("[ASM][%x] mov (ebx), ax\n", buffer->length+START);
+    write_buffer_3(buffer, 0x66, 0x89, 0x03);
 }
 
 //mov [ebx], eax
 void asm_mov_ebx_addr_eax(T_BUFFER * buffer) {
-    printf("[ASM][%x] mov (ebx), eax\n", buffer->length);
+    printf("[ASM][%x] mov (ebx), eax\n", buffer->length+START);
     write_buffer_2(buffer, 0x89, 0x03);
 }
+
+void asm_store_variable_indirect_vs(int varsize, T_BUFFER * buffer) {
+    switch(varsize) {
+        case 1:
+            asm_mov_ebx_addr_al(buffer);
+            break;
+        case 2:
+            asm_mov_ebx_addr_ax(buffer);
+            break;
+        case 4: 
+            asm_mov_ebx_addr_eax(buffer);
+            break;
+        default:
+            error("Unsupported variable size");
+            break;
+    }
+}
+
+void asm_store_variable_indirect(T_NODE * n, T_BUFFER * buffer) {
+    asm_store_variable_indirect_vs(variable_size(n), buffer);
+}
+
 
 void asm_update_jump_length(U8 * ptr, T_BUFFER * buffer, U32 start_offset) {
     start_offset = buffer->length - start_offset;
@@ -1277,6 +1377,24 @@ int is_global(T_NODE * target, T_BUFFER * buffer) {
 }
 
 
+T_NODE * variable_decl_lookup(T_NODE * target, T_BUFFER * buffer) {
+    for (int i = buffer->local_symbol_count - 1; i >= 0; i--) {
+        
+        if (is_matching(target, buffer->local_symbol[i])) {
+            
+            return buffer->local_symbol[i];
+        }
+    }
+    for (int i = buffer->global_symbol_count - 1; i >= 0; i--) {
+        if (is_matching(target, buffer->global_symbol[i])) {
+            return buffer->global_symbol[i];
+        }
+    }
+    
+    error_elt(target->elt, "No matching declaration");
+    return NULL;
+}
+
 int get_all_variable_offset(T_BUFFER * buffer) {
     int offset = 0;
     for (int i = 0;i < buffer->local_symbol_count && buffer->local_symbol[buffer->local_symbol_count - i - 1]->elt != NULL;i++) {
@@ -1301,23 +1419,6 @@ int is_variable_decl(T_NODE * up, T_BUFFER * buffer) {
     }
     return 0;
 }
-
-int is_pointer_access(T_NODE * n) {
-    if (n->prev != NULL && n->prev->type == PTR) return 1;
-    else return 0;
-}
-
-int is_array_access(T_NODE * n) {
-    if (n->desc != NULL && n->desc->type == BR_O) return 1;
-    else return 0;
-}
-/*
-T_NODE * skip(T_NODE * up) {
-    if (up == NULL || up->type == END)
-        return up;
-    else return skip(up->next);
-}
-*/
 
 T_NODE * proc_lookup(T_NODE * up, T_NODE * target) {
     if (up == NULL) {
@@ -1390,9 +1491,9 @@ int add_global_symbol(T_NODE * up, T_BUFFER * buffer) {
     if (is_array_access(up)) {
         buffer->length += variable_size(up->desc);
         printf("Current buffer length: %d\n", buffer->length);
-        int value = up->offset + 4;
+        int value = up->offset + 4 + ELF_ENTRY_VADDR + sizeof(T_ELF) + sizeof(T_ELF_PRG32_HDR);
         memcpy( &(buffer->buffer[up->offset]), &value , sizeof(value));
-    
+
     }
 
     return up->offset;
@@ -1565,9 +1666,13 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
                 asm_retrieve_variable(buffer->local_symbol[doffset], get_variable_offset(up, buffer), buffer);
 
                 if (is_pointer_access(up)) {
-                    puts("Indirect retrive");
+                    puts("Indirect retrieve");
                     asm_mov_ebx_eax(buffer);
-                    asm_mov_eax_ebx_addr(buffer);
+                    //asm_mov_eax_ebx_addr(buffer);
+                    
+                    //asm_retrieve_variable_indirect_vs(type_size(variable_decl_lookup(up, buffer)->prev->prev->type), buffer);
+
+                    asm_retrieve_variable_indirect_vs(4, buffer);
                 } else if (is_array_access(up)) {
                     puts("Array retrieve");
                     asm_mov_ebx_eax(buffer);
@@ -1589,10 +1694,13 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
                     asm_store_variable(&anonymous_int, get_variable_dynamic_offset(local_offset, buffer), buffer);
                     
                     line(get_token_3(up, DESC, DESC, NEXT), local_offset, buffer);
-                    asm_imul_eax_value(buffer, variable_size(buffer->local_symbol[doffset]));
+                    //asm_imul_eax_value(buffer, variable_size(buffer->local_symbol[doffset]));
+                    asm_imul_eax_value(buffer, type_size(variable_decl_lookup(up, buffer)->prev->type));
                     asm_add_variable_and_store(&anonymous_int, get_variable_dynamic_offset(local_offset, buffer), buffer);
                     
                     asm_retrieve_variable_ebx(get_variable_dynamic_offset(local_offset, buffer), buffer);
+
+                    
                     asm_mov_eax_ebx_addr(buffer);                   
                     
 
@@ -1610,6 +1718,7 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
 
             T_NODE * gvar = buffer->global_symbol[goffset];
             if (stack_offset == -1) {
+            //if (1) {
                 
                 if (is_array_access(up)) {
                     
@@ -1619,7 +1728,9 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
                     line(get_token_3(up, DESC, DESC, NEXT), local_offset, buffer);
                     asm_imul_eax_value(buffer, variable_size(buffer->local_symbol[local_offset]));
                     asm_store_variable_eax(get_variable_dynamic_offset(local_offset, buffer), buffer);            
-                    asm_load_eax(gvar->offset + ELF_ENTRY_VADDR + sizeof(T_ELF) + sizeof(T_ELF_PRG32_HDR), buffer);                    
+                    asm_load_eax(gvar->offset + ELF_ENTRY_VADDR + sizeof(T_ELF) + sizeof(T_ELF_PRG32_HDR), buffer); 
+                    asm_mov_ebx_eax(buffer);
+                    asm_mov_eax_ebx_addr(buffer);                   
                     asm_add_variable_and_store(&anonymous_int, get_variable_dynamic_offset(local_offset, buffer), buffer);
                 
                     asm_retrieve_variable_ebx(get_variable_dynamic_offset(local_offset, buffer), buffer);
@@ -1648,8 +1759,12 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
                 if (is_array_access(up)) {
                     line(get_token_3(up, DESC, DESC, NEXT), -1, buffer);
                     asm_imul_eax_value(buffer, variable_size(&anonymous_int));
-                    asm_add_eax_value(buffer, gvar->offset + ELF_ENTRY_VADDR + sizeof(T_ELF) + sizeof(T_ELF_PRG32_HDR));
-                    asm_mov_ebx_eax(buffer);
+                    //asm_add_eax_value(buffer, gvar->offset + ELF_ENTRY_VADDR + sizeof(T_ELF) + sizeof(T_ELF_PRG32_HDR));
+                    asm_retrieve_variable_ebx_mem(gvar->offset + ELF_ENTRY_VADDR + sizeof(T_ELF) + sizeof(T_ELF_PRG32_HDR), buffer);
+                    asm_add_ebx_eax(buffer);
+
+
+                    //asm_mov_ebx_eax(buffer);
                     asm_mov_eax_ebx_addr(buffer); 
                 } else {
                     asm_retrieve_variable_mem(gvar, gvar->offset + ELF_ENTRY_VADDR + sizeof(T_ELF) + sizeof(T_ELF_PRG32_HDR), buffer);
@@ -1806,16 +1921,27 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
             unstack_local_symbol(buffer);
         }
            
-
-
         if (is_pointer_access(up->prev) && (up->prev->prev->prev == NULL || !is_type(up->prev->prev->prev->type))) {
             puts("INDIRECT STORE");
             asm_retrieve_variable_ebx(get_variable_dynamic_offset(stack_offset, buffer), buffer);
-            asm_mov_ebx_addr_eax(buffer);
+            //asm_mov_ebx_addr_eax(buffer);
+
+            asm_store_variable_indirect_vs(type_size(variable_decl_lookup(up->prev, buffer)->prev->prev->type), buffer);
         } else if (is_array_access(up->prev)) {
             puts("INDIRECT STORE OF ARRAY");
+            /*
+            if (is_global(variable_decl_lookup(up->prev, buffer), buffer)) {
+                asm_retrieve_variable_ebx_mem(variable_decl_lookup(up->prev, buffer)->offset 
+                    + ELF_ENTRY_VADDR + sizeof(T_ELF) + sizeof(T_ELF_PRG32_HDR), buffer);
+            } else {
+                asm_retrieve_variable_ebx(get_variable_dynamic_offset(stack_offset, buffer), buffer);
+            }
+            */
             asm_retrieve_variable_ebx(get_variable_dynamic_offset(stack_offset, buffer), buffer);
-            asm_mov_ebx_addr_eax(buffer);
+            //asm_mov_ebx_addr_eax(buffer);
+            //int targetOffset = get_variable_dynamic_offset_from_symbol(up->prev, buffer);
+            
+            asm_store_variable_indirect_vs(type_size(variable_decl_lookup(up->prev, buffer)->prev->type), buffer);
         } else {
             asm_store_variable(buffer->local_symbol[stack_offset], get_variable_dynamic_offset(stack_offset, buffer), buffer);
         }
@@ -1855,7 +1981,24 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         } else {
             int goffset = get_offset_from_global_symbol(up->next, buffer);
             asm_load_eax(buffer->global_symbol[goffset]->offset + ELF_ENTRY_VADDR + sizeof(T_ELF) + sizeof(T_ELF_PRG32_HDR), buffer);
+            
         }
+
+        if (is_array_access(up->next)) {
+            puts("AND ARRAY ACCESS");
+            asm_mov_ebx_eax(buffer);
+            asm_mov_eax_ebx_addr(buffer);
+
+            int doffset = add_local_symbol(&anonymous_int, buffer, 1);
+            asm_store_variable(&anonymous_int, get_variable_dynamic_offset(doffset, buffer), buffer);
+            line(get_token_3(up->next, DESC, DESC, NEXT), doffset, buffer);
+            asm_imul_eax_value(buffer, type_size(variable_decl_lookup(up->next, buffer)->prev->type));
+            asm_add_variable_and_store(&anonymous_int, get_variable_dynamic_offset(doffset, buffer), buffer);
+            asm_retrieve_variable(&anonymous_int, get_variable_dynamic_offset(doffset, buffer), buffer);
+            unstack_local_symbol(buffer);
+        }
+
+
         return up->next;
     } else if (up->type == PTR) {
         return one(up->next, stack_offset, buffer);

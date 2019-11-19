@@ -6,5 +6,7 @@ int main(int argc, char **argv) {
         t[i] = i + 1;
     }
 
-    return t[50] + 1;
+    int * z = &t[50];
+
+    return *z;
 }
