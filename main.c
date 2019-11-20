@@ -32,7 +32,8 @@ enum keyword {
     AND,
     BR_O,
     BR_C,
-    CUSTOM_T
+    CUSTOM_T,
+    DIV
 } T_KEYWORD;
 
 typedef struct T_CTXT {
@@ -280,6 +281,7 @@ enum keyword type(T_ELT * elt) {
     else if (strncmp(elt->str, "[", elt->len) == 0) result = BR_O;
     else if (strncmp(elt->str, "]", elt->len) == 0) result = BR_C;    
     else if (strncmp(elt->str, "*", elt->len) == 0) result = PTR;
+    else if (strncmp(elt->str, "/", elt->len) == 0) result = DIV;
     else if (strncmp(elt->str, "+", elt->len) == 0) result = ADD;
     else if (strncmp(elt->str, "-", elt->len) == 0) result = SUB;
     else if (strncmp(elt->str, ";", elt->len) == 0) result = END;
@@ -556,6 +558,7 @@ void create_node_expr(T_NODE * up, T_ELT * current) {
         case END:
         case EQ:
         case PTR:
+        case DIV:
         case ADD:
         case SUB:
         case INF:
@@ -744,6 +747,23 @@ int variable_size(T_NODE * up) {
     }
 }
 
+void exec_varsize(T_NODE * n, int offset, T_BUFFER * buffer, void (*f1)(int offset, T_BUFFER * buffer), 
+    void (*f2)(int offset, T_BUFFER * buffer), void (*f4)(int offset, T_BUFFER * buffer)) {
+    switch(variable_size(n)) {
+        case 1:
+            f1(offset, buffer);
+            break;
+        case 2:
+            f2(offset, buffer);
+            break;
+        case 4: 
+            f4(offset, buffer);            
+            break;
+        default:
+            error_elt(n->elt, "Unsupported variable size");
+            break;
+    }
+}
 
 void write_buffer_2(T_BUFFER * buffer, U8 a, U8 b) {
     buffer->buffer[buffer->length++] = a;
@@ -844,21 +864,7 @@ void asm_retrieve_variable_al(int offset, T_BUFFER * buffer) {
 }
 
 void asm_retrieve_variable(T_NODE * n, int offset, T_BUFFER * buffer) {
-
-    switch(variable_size(n)) {
-        case 1:
-            asm_retrieve_variable_al(offset, buffer);
-            break;
-        case 2:
-            asm_retrieve_variable_ax(offset, buffer);
-            break;
-        case 4: 
-            asm_retrieve_variable_eax(offset, buffer);
-            break;
-        default:
-            error("Unsupported variable size");
-            break;
-    }
+    exec_varsize(n, offset, buffer, asm_retrieve_variable_al, asm_retrieve_variable_ax, asm_retrieve_variable_eax);
 }
 
 // mov ebx, DWORD PTR SS:[esp]
@@ -902,23 +908,8 @@ void asm_retrieve_variable_al_mem(int offset, T_BUFFER * buffer) {
 }
 
 void asm_retrieve_variable_mem(T_NODE * n, int offset, T_BUFFER * buffer) {
-    //offset += ELF_ENTRY_VADDR + sizeof(T_ELF) + sizeof(T_ELF_PRG32_HDR);
-    switch(variable_size(n)) {
-        case 1:
-            asm_retrieve_variable_al_mem(offset, buffer);
-            break;
-        case 2:
-            asm_retrieve_variable_ax_mem(offset, buffer);
-            break;
-        case 4: 
-            asm_retrieve_variable_eax_mem(offset, buffer);
-            break;
-        default:
-            error("Unsupported variable size");
-            break;
-    }
+    exec_varsize(n, offset, buffer, asm_retrieve_variable_al_mem, asm_retrieve_variable_ax_mem, asm_retrieve_variable_eax_mem);
 }
-
 
 void asm_add_variable_and_store_nested(int offset, T_BUFFER * buffer) {
     if ( (offset >> 8) == 0 ) 
@@ -954,20 +945,7 @@ void asm_add_variable_and_store_al(int offset, T_BUFFER * buffer) {
 }
 
 void asm_add_variable_and_store(T_NODE * n, int offset, T_BUFFER * buffer) {
-    switch(variable_size(n)) {
-        case 1:
-            asm_add_variable_and_store_al(offset, buffer);
-            break;
-        case 2:
-            asm_add_variable_and_store_ax(offset, buffer);
-            break;
-        case 4: 
-            asm_add_variable_and_store_eax(offset, buffer);
-            break;
-        default:
-            error("Unsupported variable size");
-            break;
-    }
+    exec_varsize(n, offset, buffer, asm_add_variable_and_store_al, asm_add_variable_and_store_ax, asm_add_variable_and_store_eax);
 }
 
 
@@ -1006,20 +984,7 @@ void asm_sub_variable_and_store_al(int offset, T_BUFFER * buffer) {
 }
 
 void asm_sub_variable_and_store(T_NODE * n, int offset, T_BUFFER * buffer) {
-    switch(variable_size(n)) {
-        case 1:
-            asm_sub_variable_and_store_al(offset, buffer);
-            break;
-        case 2:
-            asm_sub_variable_and_store_ax(offset, buffer);
-            break;
-        case 4: 
-            asm_sub_variable_and_store_eax(offset, buffer);
-            break;
-        default:
-            error("Unsupported variable size");
-            break;
-    }
+    exec_varsize(n, offset, buffer, asm_sub_variable_and_store_al, asm_sub_variable_and_store_ax, asm_sub_variable_and_store_eax);
 }
 
 //mov eax, esp
@@ -1078,20 +1043,7 @@ void asm_store_variable_eax(int offset, T_BUFFER * buffer) {
 }
 
 void asm_store_variable(T_NODE * n, int offset, T_BUFFER * buffer) {
-    switch(variable_size(n)) {
-        case 1:
-            asm_store_variable_al(offset, buffer);
-            break;
-        case 2:
-            asm_store_variable_ax(offset, buffer);
-            break;
-        case 4: 
-            asm_store_variable_eax(offset, buffer);
-            break;
-        default:
-            error("Unsupported variable size");
-            break;
-    }
+    exec_varsize(n, offset, buffer, asm_store_variable_al, asm_store_variable_ax, asm_store_variable_eax);
 }
 
 //MEM
@@ -1118,21 +1070,7 @@ void asm_store_variable_eax_mem(int offset, T_BUFFER * buffer) {
 }
 
 void asm_store_variable_mem(T_NODE * n, int offset, T_BUFFER * buffer) {
-    //offset += ELF_ENTRY_VADDR + sizeof(T_ELF) + sizeof(T_ELF_PRG32_HDR);
-    switch(variable_size(n)) {
-        case 1:
-            asm_store_variable_al_mem(offset, buffer);
-            break;
-        case 2:
-            asm_store_variable_ax_mem(offset, buffer);
-            break;
-        case 4: 
-            asm_store_variable_eax_mem(offset, buffer);
-            break;
-        default:
-            error("Unsupported variable size");
-            break;
-    }
+    exec_varsize(n, offset, buffer, asm_store_variable_al_mem, asm_store_variable_ax_mem, asm_store_variable_eax_mem);
 }
 
 //add esp, size
@@ -1292,7 +1230,6 @@ void asm_retrieve_variable_indirect_vs(int varsize, T_BUFFER * buffer) {
     }
 }
 
-
 //mov [ebx], al
 void asm_mov_ebx_addr_al(T_BUFFER * buffer) {
     printf("[ASM][%x] mov (ebx), al\n", buffer->length+START);
@@ -1343,7 +1280,6 @@ void asm_xor_ebx_ebx(T_BUFFER * buffer) {
 void asm_store_variable_indirect(T_NODE * n, T_BUFFER * buffer) {
     asm_store_variable_indirect_vs(variable_size(n), buffer);
 }
-
 
 void asm_update_jump_length(U8 * ptr, T_BUFFER * buffer, U32 start_offset) {
     start_offset = buffer->length - start_offset;
@@ -1831,6 +1767,7 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         return up->next;
     } else if (up->type == ADD || up->type == SUB) {
         T_NODE * last;
+        
         if (stack_offset != -1) {
             last = one(get_token(up,NEXT), stack_offset, buffer);
             if (up->type == ADD)
@@ -1839,6 +1776,7 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
                 asm_sub_variable_and_store(buffer->local_symbol[stack_offset], get_variable_dynamic_offset(stack_offset, buffer), buffer);
             
         } else {
+            
             stack_offset = add_local_symbol(&anonymous_int, buffer, 1);
             asm_store_variable(&anonymous_int, get_variable_dynamic_offset(stack_offset, buffer), buffer);
             last = one(get_token(up,NEXT), stack_offset, buffer);
@@ -1853,23 +1791,14 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         return last;
 
     } else if (up->type == ADDADD || up->type == SUBSUB) {
+        retrieve_expression(up->prev, buffer);
+        if (up->type == ADDADD)
+            asm_add_eax_value(buffer, 1);
+        if (up->type == SUBSUB)
+            asm_sub_eax_value(buffer, 1);                
         
-        if (stack_offset != -1) {
-            asm_load_eax(1, buffer);
-            if (up->type == ADDADD)
-                asm_add_variable_and_store(buffer->local_symbol[stack_offset], get_variable_dynamic_offset(stack_offset, buffer), buffer);
-            if (up->type == SUBSUB)
-                asm_sub_variable_and_store(buffer->local_symbol[stack_offset], get_variable_dynamic_offset(stack_offset, buffer), buffer);
-        } else {
-            retrieve_expression(up->prev, buffer);
-            if (up->type == ADDADD)
-                asm_add_eax_value(buffer, 1);
-            if (up->type == SUBSUB)
-                asm_sub_eax_value(buffer, 1);                
-        }
         return up;
     } else if (up->type == AND) {
-
         retrieve_setup(up->next, buffer);
         asm_mov_eax_ebx(buffer);
 
@@ -1879,7 +1808,6 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
     } else if (up->type == BR_O) {
         return up->next;
     }
-
     
     return up;
 }
