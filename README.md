@@ -23,7 +23,7 @@ Then one function processes many step until the end of the line is reached
   T_NODE * line(T_NODE * up, int stack_offset, T_BUFFER * buffer)
 ```
 
-Another function iterates many blocks until the end of block is reached marked by: { ... }
+Another function iterates many lines until the end of block is reached marked by: { ... }
 ```C
   T_NODE * block(T_NODE * up, int stack_offset, T_BUFFER * buffer)
 ```
