@@ -634,7 +634,7 @@ int type_size(enum keyword k) {
 }
 
 int is_pointer_access(T_NODE * n) {
-    if (n->prev != NULL && n->prev->type == PTR && !is_type(n->prev->prev->type)) return 1;
+    if (n->prev != NULL && n->prev->type == PTR && !is_type(n->prev->prev->type) && (n->prev->prev->type != EXPR)) return 1;
     else return 0;
 }
 
@@ -1271,6 +1271,19 @@ void asm_store_variable_indirect_vs(int varsize, T_BUFFER * buffer) {
     }
 }
 
+//idiv ebx
+void asm_idiv_ebx(T_BUFFER * buffer) {
+    printf("[ASM][%x] idiv ebx\n", buffer->length+START);    
+    write_buffer_2(buffer, 0xF7, 0xFB);
+}
+
+//imul ebx
+void asm_imul_ebx(T_BUFFER * buffer) {
+    printf("[ASM][%x] imul ebx\n", buffer->length+START);    
+    write_buffer_2(buffer, 0xF7, 0xEB);
+}
+
+
 //xor ebx, ebx
 void asm_xor_ebx_ebx(T_BUFFER * buffer) {
     printf("[ASM][%x] xor ebx, ebx\n", buffer->length+START);
@@ -1803,6 +1816,33 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         asm_mov_eax_ebx(buffer);
 
         return up->next;
+    } else if (up->type == DIV || ((up->type == PTR) && (up->prev != NULL) && (up->prev->type == EXPR))) { 
+        int doffset = -1;
+        if (stack_offset == -1) {
+            doffset = add_local_symbol(&anonymous_int, buffer, 1);
+            asm_store_variable(&anonymous_int, get_variable_dynamic_offset(doffset, buffer), buffer);
+        }
+        
+        T_NODE * last = one(get_token(up,NEXT), -1, buffer);
+        asm_mov_ebx_eax(buffer);
+        
+        if (stack_offset != -1) {
+            asm_retrieve_variable_eax(get_variable_dynamic_offset(stack_offset, buffer), buffer);
+        } else {
+            asm_retrieve_variable_eax(get_variable_dynamic_offset(doffset, buffer), buffer);
+        }
+        
+        if (up->type == DIV)
+            asm_idiv_ebx(buffer);
+        else 
+            asm_imul_ebx(buffer);
+
+        if (stack_offset == -1) {
+            unstack_local_symbol(buffer); 
+        } else {
+            asm_store_variable(&anonymous_int, get_variable_dynamic_offset(stack_offset, buffer), buffer);
+        }
+        return last;
     } else if (up->type == PTR) {
         return one(up->next, stack_offset, buffer);
     } else if (up->type == BR_O) {
