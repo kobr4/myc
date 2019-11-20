@@ -13,7 +13,7 @@ Very simple stuff
 2. AST (sort of) pass : creates a tree starting from the top of the source file
 3. Code generation pass : browses through tokens and generate the corresponding machine code
 
-One main function processes one program step (which is a variable notion depending of the expression in encounter) and returns the last token processed :
+One main function processes one program step (which is a variable notion depending of the expression it encounters) and returns the last token processed :
 ```C
   T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer)
 ```
