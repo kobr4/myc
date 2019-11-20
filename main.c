@@ -1268,6 +1268,13 @@ void asm_mov_eax_ebx_addr(T_BUFFER * buffer) {
     write_buffer_2(buffer, 0x8B, 0x03);
 }
 
+//mov eax, ebx
+void asm_mov_eax_ebx(T_BUFFER * buffer) {
+    //0x89, 0xD8
+    printf("[ASM][%x] mov eax, ebx\n", buffer->length+START);
+    write_buffer_2(buffer, 0x89, 0xD8);
+}
+
 void asm_retrieve_variable_indirect_vs(int varsize, T_BUFFER * buffer) {
     switch(varsize) {
         case 1:
@@ -1550,15 +1557,6 @@ T_NODE * block_or_line(T_NODE * up, T_NODE * alternative, int stack_offset, T_BU
     return last;        
 }
 
-T_NODE * calling_proc(T_NODE * up) {
-    T_NODE * n = up->asc;
-    while (!is_procedure_body(n) ) {
-        n = n->asc;
-        if (n == NULL) return NULL;
-    }
-    return n;
-}
-
 T_NODE * prog_arg(T_NODE * proc, int c) {
     T_NODE * arg = proc->desc->desc;
     int count = 0;
@@ -1568,19 +1566,6 @@ T_NODE * prog_arg(T_NODE * proc, int c) {
         count++;
     }
     return arg;
-}
-
-int contains_operand(T_NODE * n) {
-    while (n != NULL) {
-        if (n->type == ADD || n->type == SUB || n->type == PTR) {
-            return 1;
-        }
-
-        if (n->type == END) return 0;
-
-        n = n->next;
-    }
-    return 0;
 }
 
 void stack_parameters(T_NODE * up, T_BUFFER * buffer, T_NODE * proc, int count) {
@@ -1745,20 +1730,7 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         return end;   
 
     } else if (up->type == RET) {
-        T_NODE * n = calling_proc(up);
-        T_NODE * last;
-        if (contains_operand(up)) {
-            int doffset = add_local_symbol(n, buffer, 1) ;
-            last = one(up->next, doffset, buffer);
-            asm_store_variable(n, get_variable_dynamic_offset(doffset, buffer), buffer);
-            if (last != NULL && last->next != NULL)
-                last = line(last->next, doffset, buffer);
-
-            asm_retrieve_variable(buffer->local_symbol[doffset], get_variable_dynamic_offset(doffset, buffer), buffer);
-        } else {
-            puts("No operand");
-            last = line(up->next, -1, buffer);
-        }
+        T_NODE * last = last = line(up->next, -1, buffer);
         asm_remove_variable(buffer, get_all_variable_offset(buffer));
         asm_ret(buffer);      
 
@@ -1898,29 +1870,8 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         return up;
     } else if (up->type == AND) {
 
-        if (!is_global(up->next, buffer)) { 
-            asm_mov_eax_esp(buffer);
-            asm_add_eax_value(buffer, get_variable_offset(up->next, buffer));
-        } else {
-            int goffset = get_offset_from_global_symbol(up->next, buffer);
-            asm_load_eax(buffer->global_symbol[goffset]->offset + ELF_ENTRY_VADDR + sizeof(T_ELF) + sizeof(T_ELF_PRG32_HDR), buffer);
-            
-        }
-
-        if (is_array_access(up->next)) {
-            puts("AND ARRAY ACCESS");
-            asm_mov_ebx_eax(buffer);
-            asm_mov_eax_ebx_addr(buffer);
-
-            int doffset = add_local_symbol(&anonymous_int, buffer, 1);
-            asm_store_variable(&anonymous_int, get_variable_dynamic_offset(doffset, buffer), buffer);
-            line(get_token_3(up->next, DESC, DESC, NEXT), doffset, buffer);
-            asm_imul_eax_value(buffer, type_size(variable_decl_lookup(up->next, buffer)->prev->type));
-            asm_add_variable_and_store(&anonymous_int, get_variable_dynamic_offset(doffset, buffer), buffer);
-            asm_retrieve_variable(&anonymous_int, get_variable_dynamic_offset(doffset, buffer), buffer);
-            unstack_local_symbol(buffer);
-        }
-
+        retrieve_setup(up->next, buffer);
+        asm_mov_eax_ebx(buffer);
 
         return up->next;
     } else if (up->type == PTR) {
