@@ -4,14 +4,14 @@ The goal of this project is the build a minimalistic C compiler that do not requ
 ## Features
 * Targetting x86 32bit instruction set on the Linux platform
 * Highly incomplete currently
-* Should be retargetable in the futrue
+* Should be retargetable in the future
 
 ## Algorithm
 Very simple stuff
 
-1. Tokenizing pass : transform character and expressions into tokens
+1. Tokenizing pass : transform characters and expressions into tokens
 2. AST (sort of) pass : creates a tree starting from the top of the source file
-3. Code generation pass : browse through tokens and generate the corresponding machine code
+3. Code generation pass : browses through tokens and generate the corresponding machine code
 
 One main function processes one program step (which is a variable notion depending of the expression in encounter) and returns the last token processed :
 {
