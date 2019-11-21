@@ -1612,8 +1612,6 @@ void stack_parameters(T_NODE * up, T_BUFFER * buffer, T_NODE * proc, int count) 
         while (n != NULL && n->type != EXPR) n = n->next;
         if (n == NULL) error_elt(up->elt, "Syntax Error");
         display_elt_ctxt("found arg: ", n->elt);
-        //printf("VARSIZE: %d\n", variable_size(n));
-        //printf("ARRAY: %d\n", is_array_access(n->next));
         int doffset = add_local_symbol(n, buffer, 1);
         one(up, -1, buffer);
         asm_store_variable(n, get_variable_dynamic_offset(doffset, buffer), buffer);
@@ -1754,9 +1752,11 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         return handle_expression(up, stack_offset, buffer);
     } else if (up->type == SUP || up->type == INF || up->type == EQEQ || up->type == NEQ) {
         
-        puts("STORING TO EBX FOR COMP");
-        asm_mov_ebx_eax(buffer);
+        int doffset = add_local_symbol(&anonymous_int, buffer, 1);
+        asm_store_variable_eax(get_variable_dynamic_offset(doffset, buffer), buffer);
         T_NODE * end = line(up->next, -1, buffer);
+        asm_retrieve_variable_ebx(get_variable_dynamic_offset(doffset, buffer), buffer);
+        unstack_local_symbol(buffer);
         asm_cmp_eax_ebx(buffer);
         if (up->type == NEQ)
             asm_jump_equal(buffer, 10);
