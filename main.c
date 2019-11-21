@@ -33,7 +33,9 @@ enum keyword {
     BR_O,
     BR_C,
     CUSTOM_T,
-    DIV
+    DIV,
+    STR,
+    CCHAR
 } T_KEYWORD;
 
 typedef struct T_CTXT {
@@ -290,6 +292,8 @@ enum keyword type(T_ELT * elt) {
     else if (strncmp(elt->str, ">", elt->len) == 0) result = SUP;
     else if (strncmp(elt->str, "<", elt->len) == 0) result = INF;
     else if (strncmp(elt->str, "&", elt->len) == 0) result = AND;
+    else if (elt->len > 0 && elt->str[0]=='"') result = STR;
+    else if (elt->len > 0 && elt->str[0]=='\'') result = CCHAR;
     return result;
 } 
 
@@ -507,6 +511,30 @@ T_ELT * tokenize(char * input,int size) {
                     current_exp = c;                     
                 }
                 break;
+            case '"':
+                if (current_exp != -1) {
+                    current = add_token(current, &input[current_exp], c-current_exp, line);
+                }  
+                current_exp = c;
+                c++;
+                while(c < size && input[c] != '"') c++;
+                if (input[c] == '"') c++;
+                current = add_token(current, &input[current_exp], c-current_exp, line);
+                
+                current_exp = -1;              
+                break;
+            case '\'':
+                if (current_exp != -1) {
+                    current = add_token(current, &input[current_exp], c-current_exp, line);
+                }  
+                current_exp = c;
+                c++;
+                while(c < size && input[c] != '\'') c++;
+                if (input[c] == '\'') c++;
+                current = add_token(current, &input[current_exp], c-current_exp, line);
+                
+                current_exp = -1;              
+                break;                
             default:
                 if (current_exp == -1) {
                     current_exp = c;
@@ -572,6 +600,8 @@ void create_node_expr(T_NODE * up, T_ELT * current) {
         case WHILE:
         case DO:
         case AND:
+        case STR:
+        case CCHAR:
             //ctxt.type = t_current;
             current_n = add_next_node(up, current, up);
             create_node_expr(current_n, current->next);      
@@ -703,7 +733,10 @@ int resolve(T_NODE * node, int left) {
         return resolve(node->next, v);
     }
 
-
+    if (node->type == CCHAR) {
+        
+        return resolve(node->next, node->elt->str[1]);
+    }
     return resolve(node->next, left);
 }
 
@@ -1457,12 +1490,36 @@ int add_global_symbol(T_NODE * up, T_BUFFER * buffer) {
     buffer->length += variable_size(up);
 
     if (is_array_access(up)) {
-        buffer->length += variable_size(up->desc);
+        
+        if (up->next != NULL && up->next->type == EQ) {
+            if (up->next->next->type == STR) {
+                memcpy( &(buffer->buffer[buffer->length]), up->next->next->elt->str+1, up->next->next->elt->len-2);
+                buffer->length += up->next->next->elt->len-2;
+
+                printf("Copied: %d\n", up->next->next->elt->len-2);
+            } else {
+                error_elt(up->elt,"Unsupported declaration");
+            }
+        } else {
+            buffer->length += variable_size(up->desc);
+        }
+        
         printf("Current buffer length: %d\n", buffer->length);
         int value = up->offset + 4 + ELF_ENTRY_VADDR + sizeof(T_ELF) + sizeof(T_ELF_PRG32_HDR);
         memcpy( &(buffer->buffer[up->offset]), &value , sizeof(value));
 
+    } else {
+
+        if (up->next->type == EQ) {
+            
+            int value = resolve(up->next->next, 0);
+            printf("value = %d\n", value);
+            memcpy( &(buffer->buffer[up->offset]), &value , variable_size(up));
+        }
+
     }
+
+
 
     return up->offset;
 }
