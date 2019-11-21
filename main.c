@@ -18,6 +18,7 @@ enum keyword {
     EXPR,
     COM,
     EQ,
+    NEQ,
     IF,
     ELSE,
     SUP,
@@ -271,6 +272,7 @@ enum keyword type(T_ELT * elt) {
     else if (elt->len == 4 && strncmp(elt->str, "else", elt->len) == 0) result = ELSE;
     else if (elt->len == 6 && strncmp(elt->str, "return", elt->len) == 0) result = RET;
     else if (elt->len == 2 && strncmp(elt->str, "==", elt->len) == 0) result = EQEQ;
+    else if (elt->len == 2 && strncmp(elt->str, "!=", elt->len) == 0) result = NEQ;
     else if (elt->len == 3 && strncmp(elt->str, "for", elt->len) == 0) result = FOR;
     else if (elt->len == 2 && strncmp(elt->str, "++", elt->len) == 0) result = ADDADD;
     else if (elt->len == 2 && strncmp(elt->str, "--", elt->len) == 0) result = SUBSUB;
@@ -499,6 +501,18 @@ T_ELT * tokenize(char * input,int size) {
                     current_exp = c;                     
                 }
                 break;
+            case '!':
+                if (current_exp != -1) {
+                    current = add_token(current, &input[current_exp], c-current_exp, line);
+                }  
+               
+                current_exp = c;
+                if (input[c+1] == '=') {
+                    current = add_token(current, &input[current_exp], 2, line);
+                    c++;
+                    current_exp = -1;
+                }
+                break;
             case '/':
                 if (current_exp == -1) {
                     current_exp = c;
@@ -585,6 +599,7 @@ void create_node_expr(T_NODE * up, T_ELT * current) {
             break;
         case END:
         case EQ:
+        case NEQ:
         case PTR:
         case DIV:
         case ADD:
@@ -705,17 +720,20 @@ int is_procedure_call(T_NODE * up) {
     return 0;
 }
 
-int resolve(T_NODE * node, int left) {
+int resolve(T_NODE * node, int left, char do_next) {
     if (node == NULL) return left;
-    if (node->elt == NULL) return resolve(node->next, left);
+
+    T_NODE * next = (do_next == 1) ? node->next : NULL; 
+
+    if (node->elt == NULL) return resolve(next, left, do_next);
     if (node->type == ADD) {
-        return left + resolve(node->next, 0);
+        return left + resolve(next, 0, do_next);
     } 
     if (node->type == SUB) {
-        return left - resolve(node->next, 0);
+        return left - resolve(next, 0, do_next);
     }
     if (node->type == PTR) {
-        return left * resolve(node->next, 0);
+        return left * resolve(next, 0, do_next);
     }
     if (is_number(node->elt)) {
         T_ELT * elt = node->elt; 
@@ -730,21 +748,21 @@ int resolve(T_NODE * node, int left) {
         
         if (left != 0) error_elt(elt, "Syntax error");
 
-        return resolve(node->next, v);
+        return resolve(next, v, do_next);
     }
 
     if (node->type == CCHAR) {
         
-        return resolve(node->next, node->elt->str[1]);
+        return resolve(next, node->elt->str[1], do_next);
     }
-    return resolve(node->next, left);
+    return resolve(next, left, do_next);
 }
 
 int variable_size(T_NODE * up) {
     if (up->prev == NULL) {
         if (up->type == BR_O && is_type(up->asc->prev->type)) {
 
-            int size = resolve(up->desc, 0) * type_size(up->asc->prev->type);
+            int size = resolve(up->desc, 0, 1) * type_size(up->asc->prev->type);
 
             printf("ARRAY size = %d\n", size);
             return size;
@@ -753,8 +771,14 @@ int variable_size(T_NODE * up) {
     }
 
     if (is_array_access(up)) {
-        return 4;
+        
+        display_elt_ctxt("is_array_access", up->elt);
+        if (is_type(up->prev->type))
+            return 4;
+
+        return type_size(up->prev->type);;
     }
+
     switch (up->prev->type) {
         case INT: 
             return 4;
@@ -1487,14 +1511,16 @@ int add_global_symbol(T_NODE * up, T_BUFFER * buffer) {
 
     buffer->global_symbol[buffer->global_symbol_count++] = up;
     up->offset = buffer->length;
-    buffer->length += variable_size(up);
+    
 
     if (is_array_access(up)) {
-        
+        buffer->length += 4;
+
         if (up->next != NULL && up->next->type == EQ) {
             if (up->next->next->type == STR) {
                 memcpy( &(buffer->buffer[buffer->length]), up->next->next->elt->str+1, up->next->next->elt->len-2);
                 buffer->length += up->next->next->elt->len-2;
+                buffer->buffer[buffer->length++] = 0;
 
                 printf("Copied: %d\n", up->next->next->elt->len-2);
             } else {
@@ -1509,10 +1535,11 @@ int add_global_symbol(T_NODE * up, T_BUFFER * buffer) {
         memcpy( &(buffer->buffer[up->offset]), &value , sizeof(value));
 
     } else {
+        buffer->length += variable_size(up);
 
         if (up->next->type == EQ) {
             
-            int value = resolve(up->next->next, 0);
+            int value = resolve(up->next->next, 0, 1);
             printf("value = %d\n", value);
             memcpy( &(buffer->buffer[up->offset]), &value , variable_size(up));
         }
@@ -1582,12 +1609,14 @@ void stack_parameters(T_NODE * up, T_BUFFER * buffer, T_NODE * proc, int count) 
 
     if (up->elt != NULL) {
         T_NODE * n = prog_arg(proc, count);
-
+        while (n != NULL && n->type != EXPR) n = n->next;
+        if (n == NULL) error_elt(up->elt, "Syntax Error");
         display_elt_ctxt("found arg: ", n->elt);
-
-        int doffset = add_local_symbol(n->next, buffer, 1);
+        //printf("VARSIZE: %d\n", variable_size(n));
+        //printf("ARRAY: %d\n", is_array_access(n->next));
+        int doffset = add_local_symbol(n, buffer, 1);
         one(up, -1, buffer);
-        asm_store_variable(n->next, get_variable_dynamic_offset(doffset, buffer), buffer);
+        asm_store_variable(n, get_variable_dynamic_offset(doffset, buffer), buffer);
         if (up->next != NULL)
             line(up->next, doffset, buffer);
         
@@ -1612,7 +1641,13 @@ void retrieve_setup(T_NODE * up, T_BUFFER * buffer) {
         if (is_array_access(up)) {
             puts("Array retrieve");
             line(get_token_3(up, DESC, DESC, NEXT), -1, buffer);
-            asm_imul_eax_value(buffer, type_size(variable_decl_lookup(up, buffer)->prev->type));
+            T_NODE * decl_n = variable_decl_lookup(up, buffer);
+            if (decl_n->prev->type == PTR && decl_n->desc == NULL) {
+                asm_imul_eax_value(buffer, type_size(variable_decl_lookup(up, buffer)->prev->prev->type));
+            } else {
+                asm_imul_eax_value(buffer, type_size(variable_decl_lookup(up, buffer)->prev->type));
+            }
+
             asm_mov_ebx_eax(buffer); 
         } else {
             asm_xor_ebx_ebx(buffer);
@@ -1641,7 +1676,20 @@ T_NODE * retrieve_expression(T_NODE * up, T_BUFFER * buffer) {
             asm_mov_ebx_eax(buffer);
         } 
 
-        asm_retrieve_variable_indirect_vs(type_size(variable_decl_lookup(up, buffer)->prev->type), buffer);
+        if (is_array_access(up)) {
+
+            T_NODE * decl_n = variable_decl_lookup(up, buffer);
+            if (decl_n->prev->type == PTR && decl_n->desc == NULL) {
+                asm_load_eax(0, buffer);
+                asm_retrieve_variable_indirect_vs(type_size(variable_decl_lookup(up, buffer)->prev->prev->type), buffer);
+            } else {
+                asm_load_eax(0, buffer);
+                asm_retrieve_variable_indirect_vs(variable_size(variable_decl_lookup(up, buffer)), buffer);
+            }            
+            
+        } else {
+            asm_retrieve_variable_indirect_vs(type_size(variable_decl_lookup(up, buffer)->prev->type), buffer);
+        }
 }
 
 T_NODE * handle_expression(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
@@ -1679,20 +1727,9 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         display_elt_ctxt("Variable declaration: ", up->elt);
 
         return handle_expression(up, add_local_symbol(up, buffer, 0), buffer);
-    } else if (is_number(up->elt)) {
+    } else if (is_number(up->elt) || up->type == CCHAR) {
         
-        T_ELT * elt = up->elt; 
-        char value[32];
-        for (int i = 0;i < elt->len;i++) {
-            value[i] = elt->str[i]; 
-        }
-
-        value[elt->len] = 0;
-
-        int v = atoi(value);
-        
-        
-        asm_load_eax(v, buffer);
+        asm_load_eax(resolve(up, 0, 0), buffer);
         return up;
 
      } else if(is_procedure_call(up)){
@@ -1715,13 +1752,15 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         display_elt_ctxt("Variable assign: ", up->elt);
         
         return handle_expression(up, stack_offset, buffer);
-    } else if (up->type == SUP || up->type == INF || up->type == EQEQ) {
+    } else if (up->type == SUP || up->type == INF || up->type == EQEQ || up->type == NEQ) {
         
         puts("STORING TO EBX FOR COMP");
         asm_mov_ebx_eax(buffer);
         T_NODE * end = line(up->next, -1, buffer);
         asm_cmp_eax_ebx(buffer);
-        if (up-> type == INF)
+        if (up->type == NEQ)
+            asm_jump_equal(buffer, 10);
+        else if (up-> type == INF)
             asm_jump_less_eq(buffer, 10);
         else if (up->type == SUP)
             asm_jump_greater_eq(buffer, 10);
