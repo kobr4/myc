@@ -379,7 +379,12 @@ T_NODE * get_token_5_null(T_NODE * up, char a, char b, char c, char d, char e) {
     return get_token_null(get_token_4_null(up, a, b, c, d), e);
 }
 
-
+T_NODE * get_token_alternative(T_NODE * up, char a, char b) {
+    T_NODE * n = get_token_null(up, a);
+    if (n == NULL)
+        return get_token_null(up, b);
+    return n;       
+}
 
 T_ELT * add_token(T_ELT * current, char * p, int len, int line) {
     T_ELT * new_c = (T_ELT *)malloc(sizeof(T_ELT));
@@ -1878,7 +1883,7 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         T_NODE * last;
         
         if (stack_offset != -1) {
-            last = one(get_token(up,NEXT), stack_offset, buffer);
+            last = one(get_token_alternative(up, DESC, NEXT), stack_offset, buffer);
             if (up->type == ADD)
                 asm_add_variable_and_store(buffer->local_symbol[stack_offset], get_variable_dynamic_offset(stack_offset, buffer), buffer);
             if (up->type == SUB) 
@@ -1888,7 +1893,7 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
             
             stack_offset = add_local_symbol(&anonymous_int, buffer, 1);
             asm_store_variable(&anonymous_int, get_variable_dynamic_offset(stack_offset, buffer), buffer);
-            last = one(get_token(up,NEXT), stack_offset, buffer);
+            last = one(get_token_alternative(up, DESC, NEXT), stack_offset, buffer);
             if (up->type == ADD)
                 asm_add_variable_and_store(buffer->local_symbol[stack_offset], get_variable_dynamic_offset(stack_offset, buffer), buffer);
             if (up->type == SUB)
@@ -1943,6 +1948,9 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         return one(up->next, stack_offset, buffer);
     } else if (up->type == BR_O) {
         return up->next;
+    } else if (up->type == PAR_O) {
+        line(up->desc->next, stack_offset, buffer);
+        return up->asc;
     }
     
     return up;
