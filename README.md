@@ -6,6 +6,24 @@ The goal of this project is to build a minimalistic C compiler that do not requi
 * Highly incomplete currently
 * Should be retargetable in the future
 
+## Minimal X86 32 bit architecture knowledge
+
+| Registers     | Width | Usage                                | Compiler use
+|---------------|-------|--------------------------------------|--------------------
+| EAX           |  32   | Generic / Can be divided into 16 bits / 8 bits registers  | Store the last value processed
+| EBX           |  32   | Generic                              | Used to store the second hand of comparison
+| ECX           |  32   | Generic                              | Not used
+| EDX           |  32   | Generic                              | Not used
+| EIP           |  32   | Pointer to the current instruction   | Changed by using "CALL" instruction to run a function
+| ESP           |  32   | Pointer to the top of the stack      | Stack stores local variables and function arguments
+
+## Minimal ABI knowledge
+
+* Function call parameters are stored at the top of the stack
+* Function returned value is stored in the EAX register
+* Local variables are stored in the stack, access is stack pointer relative
+* Global variables are stored in memory at an absolute adress
+
 ## Algorithm
 Very simple stuff
 
