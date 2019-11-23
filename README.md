@@ -20,6 +20,12 @@ The goal of this project is to build a minimalistic C compiler that do not requi
   ./main tests/fibo.c
 ```
 
+### Run test suite
+
+```bash
+  ./run-tests.sh
+```
+
 ## ELF 32bit excecutable format
 
 The executable format genereted by the compiler is "ELF 32bit" which is the standard executable format for 
@@ -78,7 +84,7 @@ Another function iterates many lines until the end of block is reached marked by
 1. Write tests, lot of tests !
 2. Refer to x86 documentation, opcodes conversions in particular:
     https://defuse.ca/online-x86-assembler.htm#disassembly
-3. Using GDB, place breakpoint using the compiler output which gives adress for each program instructions
+3. With GDB, place breakpoint using the compiler output which gives address for each program instruction
 4. Profit !
 
 ## Useful docs
