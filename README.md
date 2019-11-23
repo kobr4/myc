@@ -6,6 +6,33 @@ The goal of this project is to build a minimalistic C compiler that do not requi
 * Highly incomplete currently
 * Should be retargetable in the future
 
+## Usage
+
+### Build
+
+```bash
+  gcc main.c -o main
+```
+
+### Compile code
+
+```bash
+  ./main tests/fibo.c
+```
+
+## ELF 32bit excecutable format
+
+The executable format genereted by the compiler is "ELF 32bit" which is the standard executable format for 
+Linux 32bit systems, it can also be ran on Linux 64bit system.
+
+All ELF files contain a header which indicates various informations on the file content. One important information is the "entry" field which is the memory address where execution will start.
+
+After the header, an ELF file contains a list of the section of different types.
+To be straight on point with code generation, we will have to insert a "program section", containing a section header followed by the program binary code.
+The header section contains a field "sh_addr" that indicated the adress where the first byte of the program binary code will we placed in memory.
+
+The entry point field in the file header will point to an adress somewhere in the program code where the main() C function starts.
+
 ## Minimal X86 32 bit architecture knowledge
 
 | Registers     | Width | Usage                                | Compiler use
@@ -14,7 +41,7 @@ The goal of this project is to build a minimalistic C compiler that do not requi
 | EBX           |  32   | Generic                              | Used to store the second hand of comparison
 | ECX           |  32   | Generic                              | Not used
 | EDX           |  32   | Generic                              | Not used
-| EIP           |  32   | Pointer to the current instruction   | Changed by using "CALL" instruction to run a function
+| EIP           |  32   | Pointer to the current instruction   | Changed by using "CALL" instruction to run a function or jumps to reach another instruction block
 | ESP           |  32   | Pointer to the top of the stack      | Stack stores local variables and function arguments
 
 ## Minimal ABI knowledge
@@ -45,3 +72,22 @@ Another function iterates many lines until the end of block is reached marked by
 ```C
   T_NODE * block(T_NODE * up, int stack_offset, T_BUFFER * buffer)
 ```
+
+## Development process
+
+1. Write tests, lot of tests !
+2. Refer to x86 documentation, opcodes conversions in particular:
+    https://defuse.ca/online-x86-assembler.htm#disassembly
+3. Using GDB, place breakpoint using the compiler output which gives adress for each program instructions
+4. Profit !
+
+## Useful docs
+Linux asm system call conventions in x86 32bit architecture:
+https://www.informatik.htw-dresden.de/~beck/ASM/syscall_list.html
+
+ELF file format documentation:
+http://www.skyfree.org/linux/references/ELF_Format.pdf
+
+The famous "Dragon book":
+https://fr.wikipedia.org/wiki/Dragon_book
+
