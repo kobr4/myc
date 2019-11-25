@@ -1,3 +1,6 @@
+#ifndef ELF32
+
+#include "main.h"
 
 #define ELF_MAGIC 0x464C457F
 #define ELF_CLASS_32 1
@@ -121,3 +124,8 @@ T_ELF_PRG32_HDR elf32_prg_hdr = {
     | 0x2   //WRITE
     ,0x1000
 };
+
+int START = ELF_ENTRY_VADDR + sizeof(T_ELF) + sizeof(T_ELF_PRG32_HDR);
+
+#define ELF32
+#endif
