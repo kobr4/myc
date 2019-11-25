@@ -82,5 +82,8 @@ void error(char * msg) {
     exit(-1);
 }
 
+int variable_size(T_NODE * up);
+void error_elt(T_ELT * elt, char * msg);
+
 #define MAIN
 #endif

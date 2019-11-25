@@ -1,5 +1,7 @@
 #include "main.h"
 #include "elf32.h"
+#include <stdio.h>
+#include <stdlib.h>
 
 void exec_varsize(T_NODE * n, int offset, T_BUFFER * buffer, void (*f1)(int offset, T_BUFFER * buffer), 
     void (*f2)(int offset, T_BUFFER * buffer), void (*f4)(int offset, T_BUFFER * buffer)) {
@@ -551,4 +553,28 @@ void asm_store_variable_indirect(T_NODE * n, T_BUFFER * buffer) {
 void asm_update_jump_length(U8 * ptr, T_BUFFER * buffer, U32 start_offset) {
     start_offset = buffer->length - start_offset;
     memcpy( ptr, &start_offset, sizeof(U32) );
+}
+
+void write_output(char * filename,  T_BUFFER * buffer) {
+    FILE * f = fopen(filename, "wb");
+    if (f == NULL) error("Unable to create destination file.");
+
+    //ELF_ENTRY_VADDR+sizeof(T_ELF)+sizeof(T_ELF_PRG32_HDR),
+    elf32.e_entry = ELF_ENTRY_VADDR + sizeof(T_ELF) + sizeof(T_ELF_PRG32_HDR)+ buffer->length;
+
+    printf("ADDR: %x\n", elf32.e_entry);
+    fwrite(&elf32, sizeof(T_ELF), 1, f);
+
+    elf32_prg_hdr.p_filesz = elf32_prg_hdr.p_filesz + buffer->length;
+    elf32_prg_hdr.p_memsz = elf32_prg_hdr.p_memsz + buffer->length;
+
+    fwrite(&elf32_prg_hdr, sizeof(T_ELF_PRG32_HDR), 1, f);
+
+    asm_call(buffer, buffer->main_offset - buffer->length);
+
+    fwrite(buffer->buffer, buffer->length, 1, f);
+
+    
+    fwrite(&prog, sizeof(prog), 1, f);
+    fclose(f);
 }

@@ -60,3 +60,4 @@ out
 *.s
 fibo
 emu.sh
+mockatests

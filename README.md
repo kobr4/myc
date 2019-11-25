@@ -3,6 +3,7 @@ The goal of this project is to build a minimalistic C compiler that do not requi
 
 ## Features
 * Targetting x86 32bit instruction set on the Linux platform
+* Targetting m68k instruction set on Amiga OS
 * Highly incomplete currently
 * Should be retargetable in the future
 
@@ -10,9 +11,16 @@ The goal of this project is to build a minimalistic C compiler that do not requi
 
 ### Build
 
+For X86 architecture
 ```bash
-  gcc main.c -o main
+  gcc -D X86 main.c -o main
 ```
+
+For Motorola 68000 architecture
+```bash
+  gcc -D M68K main.c -o main
+```
+
 
 ### Compile code
 
@@ -20,7 +28,15 @@ The goal of this project is to build a minimalistic C compiler that do not requi
   ./main tests/fibo.c
 ```
 
-### Run test suite
+### Run unit test suite
+
+Requires the test library cmocka
+
+```bash
+  ./run-mocka.sh
+```
+
+### Run compilation test suite
 
 ```bash
   ./run-tests.sh
