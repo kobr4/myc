@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+
 typedef struct T_HUNK_HEADER {
     U32 magic;
     U32 empty_list;
@@ -30,24 +31,17 @@ U16 sl_endian(U16 in) {
     return (in & 0xFF00) >> 8 | (in & 0xFF) << 8; 
 }
 
-void write_hunk(char * filename, T_BUFFER * buffer2) {
 
-    T_BUFFER * buffer = (T_BUFFER *)malloc(sizeof(T_BUFFER));
-    buffer->length = 0;
-    /*
-    add_imm_u32(buffer, D1, 0x20);
-    move_imm_u8(buffer, D1, 0x20);
-    jsr(buffer, 0x4B98C);
-    moveq(buffer, 3, D0);
-    
-    rts(buffer);
-    */
+void write_setup(T_BUFFER * buffer, int main_offset);
+
+void write_hunk(char * filename, T_BUFFER * buffer) {
+    puts("Writing hunk");
     U32 hunk_end = l_endian(0x3F2);
-    U16 move_80_d0 = sl_endian(0x7003);
-    U16 asm_rts = sl_endian(0x4E75);
-    U16 zero = 0;
-    U32 size = l_endian(1);
 
+    T_BUFFER * setup_buffer = (T_BUFFER*)malloc(sizeof(T_BUFFER));
+    setup_buffer->length = 0;
+    write_setup(setup_buffer, buffer->main_offset + 2);
+    
     FILE * f = fopen(filename, "wb");
     if (f == NULL) error("Unable to create destination file.");
 
@@ -55,7 +49,7 @@ void write_hunk(char * filename, T_BUFFER * buffer2) {
     code.magic = l_endian(0x3E9);
     
     code.n = buffer->length / 4;
-    U32 code_n = l_endian(code.n);
+ //   U32 code_n = l_endian(code.n);
     code.code = (U32*)malloc(code.n * sizeof(U32));
     
     U8 * codeAsU8 = (U8*)code.code;
@@ -83,14 +77,16 @@ void write_hunk(char * filename, T_BUFFER * buffer2) {
     fwrite(header.hunk_sizes, sizeof(U32) * 1, 1, f);
 
     fwrite(&code.magic, sizeof(code.magic), 1, f);
-    fwrite(&code_n, sizeof(code.n), 1, f);
+
+//    fwrite(&code_n, sizeof(code.n), 1, f);
+    
+    int code_length = l_endian(code.n + setup_buffer->length / 4);
+    printf("Code length %d\n", code.n + setup_buffer->length / 4);
+    fwrite(&code_length, 4, 1, f);
+    fwrite(setup_buffer->buffer, (setup_buffer->length / 4) * sizeof(U32), 1, f);
+
     fwrite(code.code, code.n * sizeof(U32), 1, f);
     
-    //fwrite(&size, 4, 1, f);
-    //fwrite(&move_80_d0, 2, 1, f);
-    //fwrite(&asm_rts, 2, 1, f);
-    //fwrite(&zero, 2, 1, f); 
-
     fwrite(&hunk_end, sizeof(U32), 1, f);
     fclose(f);
 }

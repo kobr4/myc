@@ -555,7 +555,7 @@ void asm_update_jump_length(U8 * ptr, T_BUFFER * buffer, U32 start_offset) {
     memcpy( ptr, &start_offset, sizeof(U32) );
 }
 
-void write_output(char * filename,  T_BUFFER * buffer) {
+void write_elf32(char * filename,  T_BUFFER * buffer) {
     FILE * f = fopen(filename, "wb");
     if (f == NULL) error("Unable to create destination file.");
 

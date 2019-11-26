@@ -108,6 +108,16 @@ void jsr(T_BUFFER * buffer, U32 address) {
     write_u32(buffer, address);
 }
 
+//JSR PC with DISP
+void jsr_disp(T_BUFFER * buffer, short offset) {
+    printf("[ASM] jsr (PC + $%x)\n", offset);
+    U8 q1 = qbit(0, 1, 0, 0);
+    U8 q2 = qbit(1, 1, 1, 0);
+    buffer->buffer[buffer->length++] = qbit_and(q1, q2);
+    buffer->buffer[buffer->length++] = 1 << 7 | 0 << 6 | M_DISP_PC << 3 | XN_DISP_PC;
+    write_u16(buffer, offset);
+}
+
 //JMP
 void jmp_abs(T_BUFFER * buffer, U32 address) {
     printf("[ASM] jmp $%x\n", address);
@@ -119,7 +129,7 @@ void jmp_abs(T_BUFFER * buffer, U32 address) {
 }
 
 void jmp_disp(T_BUFFER * buffer, U16 offset) {
-    printf("[ASM] jmp $%x\n", offset);
+    printf("[ASM] jmp (PC + $%x)\n", offset);
     U8 q1 = qbit(0, 1, 0, 0);
     U8 q2 = qbit(1, 1, 1, 0);
     buffer->buffer[buffer->length++] = qbit_and(q1, q2);
@@ -211,4 +221,13 @@ void asm_store_variable(T_NODE * n, int offset, T_BUFFER * buffer) {
 
 void asm_retrieve_variable(T_NODE * n, int offset, T_BUFFER * buffer) {
     move_addr_disp_reg(buffer, A7, D0, offset, variable_size(n));
+}
+
+void asm_call(T_BUFFER * buffer, int offset) {
+    jsr_disp(buffer, offset);
+}
+
+void write_setup(T_BUFFER * buffer, int main_offset) {
+    jsr_disp(buffer, main_offset);
+    rts(buffer);
 }

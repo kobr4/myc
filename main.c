@@ -1014,6 +1014,8 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
     } else if (is_number(up->elt) || up->type == CCHAR) {
 #ifdef X86        
         asm_load_eax(resolve(up, 0, 0), buffer);
+#elif defined M68K
+        move_imm(buffer, D0, resolve(up, 0, 0), 4);
 #endif        
         return up;
 
@@ -1029,9 +1031,9 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
             stack_parameters(get_token_2(up, DESC, DESC), buffer, proc, 0);
         else 
             error("Invalid procedure call");
-#ifdef X86
+
         asm_call(buffer, offset - buffer->length);
-#endif       
+   
         return up;
     } else if (up->type == EXPR) {
         display_elt_ctxt("Variable assign: ", up->elt);
@@ -1261,13 +1263,13 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
             asm_idiv_ebx(buffer);
         else 
             asm_imul_ebx(buffer);
-
+#endif
         if (stack_offset == -1) {
             unstack_local_symbol(buffer); 
         } else {
             asm_store_variable(&anonymous_int, get_variable_dynamic_offset(stack_offset, buffer), buffer);
         }
-#endif
+
 
         return last;
     } else if (up->type == PTR) {
@@ -1385,7 +1387,7 @@ void main(int c, char** argv) {
         up = up->next; 
     };
 #ifdef X86     
-    write_output("out", buffer);
+    write_elf32("out", buffer);
 #elif defined M68K 
     write_hunk("hunk", buffer);
 #endif
