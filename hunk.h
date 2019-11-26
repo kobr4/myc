@@ -40,7 +40,7 @@ void write_hunk(char * filename, T_BUFFER * buffer) {
 
     T_BUFFER * setup_buffer = (T_BUFFER*)malloc(sizeof(T_BUFFER));
     setup_buffer->length = 0;
-    write_setup(setup_buffer, buffer->main_offset + 2);
+    write_setup(setup_buffer, buffer->main_offset + 4);
     
     FILE * f = fopen(filename, "wb");
     if (f == NULL) error("Unable to create destination file.");
@@ -80,12 +80,17 @@ void write_hunk(char * filename, T_BUFFER * buffer) {
 
 //    fwrite(&code_n, sizeof(code.n), 1, f);
     
-    int code_length = l_endian(code.n + setup_buffer->length / 4);
-    printf("Code length %d\n", code.n + setup_buffer->length / 4);
+    int code_length = l_endian(code.n + setup_buffer->length / 4 + 1);
+    printf("Code length %d vs %ld\n", code.n + setup_buffer->length / 4 + 1, setup_buffer->length + code.n * sizeof(U32));
     fwrite(&code_length, 4, 1, f);
-    fwrite(setup_buffer->buffer, (setup_buffer->length / 4) * sizeof(U32), 1, f);
-
+    //fwrite(setup_buffer->buffer, (setup_buffer->length / 4) * sizeof(U32), 1, f);
+    fwrite(setup_buffer->buffer, setup_buffer->length, 1, f);
     fwrite(code.code, code.n * sizeof(U32), 1, f);
+    U8 pad = 0;
+    for (int i = setup_buffer->length + code.n * sizeof(U32); i < (code.n + setup_buffer->length / 4 + 1) * 4; i++) {
+        fwrite(&pad, sizeof(U8), 1, f);
+    }
+
     
     fwrite(&hunk_end, sizeof(U32), 1, f);
     fclose(f);

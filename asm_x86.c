@@ -51,6 +51,10 @@ void asm_load_eax(U32 value, T_BUFFER * buffer) {
     write_buffer_dword(buffer, value);
 } 
 
+void asm_load_u32(U32 value, T_BUFFER * buffer) {
+    asm_load_eax(value, buffer);
+}
+
 // mov EBX, value
 void asm_load_ebx(U32 value, T_BUFFER * buffer) {
     printf("[ASM][%x] mov ebx,  %d\n", buffer->length+START, value);
@@ -553,6 +557,14 @@ void asm_store_variable_indirect(T_NODE * n, T_BUFFER * buffer) {
 void asm_update_jump_length(U8 * ptr, T_BUFFER * buffer, U32 start_offset) {
     start_offset = buffer->length - start_offset;
     memcpy( ptr, &start_offset, sizeof(U32) );
+}
+
+void asm_retrieve_variable_u32(int offset, T_BUFFER * buffer) {
+    asm_retrieve_variable_eax(offset, buffer);
+}
+
+void asm_store_variable_u32(int offset, T_BUFFER * buffer) {
+    asm_store_variable_eax(offset, buffer);
 }
 
 void write_elf32(char * filename,  T_BUFFER * buffer) {

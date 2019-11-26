@@ -38,7 +38,7 @@ U8 qbit_and(U8 qb1, U8 qb2) {
 #define M_ADDRESS qbit(0, 0, 1, 0)
 #define M_IMMEDIATE qbit(0, 1, 1, 1)
 #define M_DATA_REGISTER qbit(0, 0, 0, 0)
-#define M_ADRESS_REGISTER qbit(0, 0, 0, 1)
+#define M_ADDRESS_REGISTER qbit(0, 0, 0, 1)
 #define M_ADDRESS_DISP qbit(0, 1, 0, 1)
 #define M_DISP_PC qbit(0, 1, 1, 1)
 
@@ -54,12 +54,33 @@ U8 qbit_and(U8 qb1, U8 qb2) {
 #define OPS_2_W qbit(0, 0, 0, 1)
 #define OPS_2_L qbit(0, 0, 1, 0)
 
+#define D_RM2D 0
+#define D_RM2M 1
+
+#define M68K_ADD qbit(1, 1, 0, 1)
+#define M68K_SUB qbit(1, 0, 0, 1)
+
+#define COND_GEQ qbit(1, 1, 0, 0)
+#define COND_EQ qbit(0, 1, 1, 1)
+#define COND_LEQ qbit(1, 1, 1, 1)
+#define COND_NEQ qbit(0, 1, 1, 0)
+
+
 U8 ops(U8 size) {
     (size == 4) ? OPS_L : (size == 2) ? OPS_W : OPS_B;
 }
 
 U8 ops2(U8 size) {
     (size == 4) ? OPS_2_L : (size == 2) ? OPS_2_W : OPS_2_B;
+}
+
+int size2char(U8 size) {
+    if (size == 4) 
+        return 'l';
+    else if (size == 2) 
+            return 'w';
+         else
+            return 'b';
 }
 
 void write_u32(T_BUFFER * buffer, U32 value) {
@@ -128,18 +149,19 @@ void jmp_abs(T_BUFFER * buffer, U32 address) {
     write_u32(buffer, address);
 }
 
-void jmp_disp(T_BUFFER * buffer, U16 offset) {
+U8 * jmp_disp(T_BUFFER * buffer, U16 offset) {
     printf("[ASM] jmp (PC + $%x)\n", offset);
     U8 q1 = qbit(0, 1, 0, 0);
     U8 q2 = qbit(1, 1, 1, 0);
     buffer->buffer[buffer->length++] = qbit_and(q1, q2);
     buffer->buffer[buffer->length++] = 1 << 7 | 1 << 6 | M_DISP_PC << 3 | XN_DISP_PC;
     write_u16(buffer, offset);
+    return &(buffer->buffer[buffer->length - 2]); 
 }
 
 //MOVE
 void move_imm(T_BUFFER * buffer, enum DN dn, U32 value, U8 size) {
-    printf("[ASM] move #%d, d%d\n", value, dn);
+    printf("[ASM] move.%c #%d, d%d\n", size2char(size), value, dn);
     U16 instr = qbit(0, 0, 0, 0) << 14 | ops(size) << 12 | dn << 9 | M_DATA_REGISTER << 6 | M_IMMEDIATE << 3 | XN_IMMEDIATE;
     write_u16(buffer, instr);
     write_value(buffer, value, size);
@@ -147,50 +169,127 @@ void move_imm(T_BUFFER * buffer, enum DN dn, U32 value, U8 size) {
 
 //MOVE REG -> (ADDR) + OFFSET
 void move_reg_addr_disp(T_BUFFER * buffer, enum DN dn, enum AN an, U16 offset, U8 size) {
+    printf("[ASM] move.%c (a%d + %d), d%d\n", size2char(size), an, offset, dn);
     U16 instr = qbit(0, 0, 0, 0) << 14 | ops(size) << 12 | an << 9 | M_ADDRESS_DISP << 6 | M_DATA_REGISTER << 3 | dn;
     write_u16(buffer, instr);
     write_u16(buffer, offset);
 }
 
+//MOVE REG -> ADDR
+void move_reg_addr(T_BUFFER * buffer, enum DN dn, enum AN an, U8 size) {
+    printf("[ASM] move.%c d%d, a%d\n", size2char(size), dn, an);
+    U16 instr = qbit(0, 0, 0, 0) << 14 | ops(size) << 12 | an << 9 | M_ADDRESS_REGISTER << 6 | M_DATA_REGISTER << 3 | dn;
+    write_u16(buffer, instr);
+}
+
+//MOVE ADDR -> REG
+void move_addr_reg(T_BUFFER * buffer, enum DN dn, enum AN an, U8 size) {
+    printf("[ASM] move.%c a%d, d%d\n", size2char(size), an, dn);
+    U16 instr = qbit(0, 0, 0, 0) << 14 | ops(size) << 12 | dn << 9 | M_DATA_REGISTER << 6 | M_ADDRESS_REGISTER << 3 | an;
+    write_u16(buffer, instr);
+}
+
 //MOVE (ADDR) + OFFSET -> REG
 void move_addr_disp_reg(T_BUFFER * buffer, enum AN an, enum DN dn, U16 offset, U8 size) {
+    printf("[ASM] move.%c (a%d + %d), d%d\n", size2char(size), an, offset, dn);
     U16 instr = qbit(0, 0, 0, 0) << 14 | ops(size) << 12 | dn << 9 | M_DATA_REGISTER << 6 | M_ADDRESS_DISP << 3 | an;
     write_u16(buffer, instr);
     write_u16(buffer, offset);
 }
 
+//MOVEA
+void movea_imm(T_BUFFER * buffer, enum AN an, U32 value) {
+    printf("[ASM] movea.l #%d, d%d\n", value, an);
+    U16 instr = qbit(0, 0, 0, 0) << 14 | ops(4) << 12 | an << 9 | qbit(0, 0, 0, 1) << 6 | M_IMMEDIATE << 3 | XN_IMMEDIATE;
+    write_u16(buffer, instr);
+    write_u32(buffer, value);
+}
+
+
+//ADD
+void add_reg_addr_disp(T_BUFFER * buffer, enum DN dn, enum AN an, U8 size, int offset) {
+    printf("[ASM] add_reg_addr_disp\n");
+    U16 instr = M68K_ADD << 12 | dn << 9 | D_RM2M << 8 | ops2(size) << 6 | M_ADDRESS_DISP << 3 | an;
+    write_u16(buffer, instr);
+    write_u16(buffer, offset);
+}
+
+//SUB
+void sub_reg_addr_disp(T_BUFFER * buffer, enum DN dn, enum AN an, U8 size, int offset) {
+    printf("[ASM] sub_reg_addr_disp\n");
+    U16 instr = M68K_SUB << 12 | dn << 9 | D_RM2M << 8 | ops2(size) << 6 | M_ADDRESS_DISP << 3 | an;
+    write_u16(buffer, instr);
+    write_u16(buffer, offset);
+}
+
+
 //ADDI
 void add_imm(T_BUFFER * buffer, enum DN dn, U32 value, U8 size) {
+    printf("[ASM] addi.%c d%d, %d\n", size2char(size), dn, value);
     U16 instr = qbit(0, 0, 0, 0) << 12 | qbit(0, 1, 1, 0) << 8 | ops2(size) << 6 | M_DATA_REGISTER << 3 | dn;
     write_u16(buffer, instr);
     write_value(buffer, value, size);
 }
 
+
+//ADDA
 void add_imm_addr(T_BUFFER * buffer, enum AN an, U32 value, U8 size) {
-    U16 instr = qbit(0, 0, 0, 0) << 12 | qbit(0, 1, 1, 0) << 8 | ops2(size) << 6 | M_ADRESS_REGISTER << 3 | an;
+    printf("[ASM] adda.%c %d, a%d\n", size2char(size), value, an);
+    U16 instr = qbit(1, 1, 0, 1) << 12 | an << 9 | 1 << 8 | qbit(0, 0, 1, 1) << 6 | M_IMMEDIATE << 3 | XN_IMMEDIATE;
     write_u16(buffer, instr);
     write_value(buffer, value, size);
 }
 
+void add_imm_addr_disp(T_BUFFER * buffer, enum AN an, U32 value, U8 size, U16 offset) {
+    printf("[ASM] add_imm_addr_disp\n");
+    U16 instr = qbit(0, 0, 0, 0) << 12 | qbit(0, 1, 1, 0) << 8 | ops2(size) << 6 | M_ADDRESS_DISP << 3 | an;
+    write_u16(buffer, instr);
+    write_value(buffer, value, size);
+    write_u16(buffer, offset);
+}
+
+//ADDA
+void adda_reg(T_BUFFER * buffer, enum DN dn, enum AN an) {
+    printf("[ASM] adda.l d%d, a%d\n", dn, an);
+    U16 instr = M68K_ADD << 12 | an << 9 | 1 << 8 | qbit(0, 0, 1, 1) << 6 | M_DATA_REGISTER << 3 | dn;
+    write_u16(buffer, instr);
+}
+
 //SUBI
 void sub_imm(T_BUFFER * buffer, enum DN dn, U32 value, U8 size) {
+    printf("[ASM] sub_imm\n");
     U16 instr = qbit(0, 0, 0, 0) << 12 | qbit(0, 1, 0, 0) << 8 | ops2(size) << 6 | M_DATA_REGISTER << 3 | dn;
     write_u16(buffer, instr);
     write_value(buffer, value, size);
 }
 
+//SUBA
 void sub_imm_addr(T_BUFFER * buffer, enum AN an, U32 value, U8 size) {
-    U16 instr = qbit(0, 0, 0, 0) << 12 | qbit(0, 1, 0, 0) << 8 | ops2(size) << 6 | M_ADRESS_REGISTER << 3 | an;
+    printf("[ASM] suba.%c %d, a%d\n", size2char(size), value, an);
+    U16 instr = qbit(1, 0, 0, 1) << 12 | an << 9 | 1 << 8 | qbit(0, 0, 1, 1) << 6 | M_IMMEDIATE << 3 | XN_IMMEDIATE;
     write_u16(buffer, instr);
     write_value(buffer, value, size);
 }
 
 //TST
 void tst(T_BUFFER * buffer, enum DN dn, U8 size) {
+    printf("[ASM] tst.%c d%d\n", size2char(size), dn);
     U16 instr = qbit(0, 1, 0, 0) << 12 | qbit(1, 0, 1, 0) << 8 | ops2(size) << 6 | M_DATA_REGISTER << 3 | dn;
     write_u16(buffer, instr);
 }
 
+//CMP
+void cmp(T_BUFFER * buffer, enum DN dn1, enum DN dn2, U8 size) {
+    U16 instr = qbit(1, 0, 1, 1) << 12 | dn1 << 9 | 0 << 8 | ops2(size) << 6 | M_DATA_REGISTER << 3 | dn2;
+    write_u16(buffer, instr);
+}
+
+//BCC
+U8 * bcc(T_BUFFER * buffer, U8 q_cond, U8 offset) {
+    buffer->buffer[buffer->length++] = qbit(0, 1, 1, 0) << 4 | q_cond;
+    buffer->buffer[buffer->length++] = offset;
+    return &(buffer->buffer[buffer->length - 1]);  
+}
 
 int asm_line(T_BUFFER * buffer, char * line) {
     char * cline = line;
@@ -202,32 +301,76 @@ int asm_line(T_BUFFER * buffer, char * line) {
     return 0;
 }
 
+//Generic functions
+void asm_load_u32(U32 value, T_BUFFER * buffer) {
+    printf("[ASM] asm_load_u32\n");
+    move_imm(buffer, D0, value, 4);
+}
 
-//sub esp, size
 void asm_add_variable(T_NODE * up, T_BUFFER * buffer) {
     U32 size  = variable_size(up);
     sub_imm_addr(buffer, A7, size, 4);
 }
 
-//add esp, size
 void asm_remove_variable(T_BUFFER * buffer, U32 size) {
     if (size == 0) return;
+    printf("[ASM] asm_remove_variable\n");
     add_imm_addr(buffer, A7, size, 4);
 }
 
 void asm_store_variable(T_NODE * n, int offset, T_BUFFER * buffer) {
+    printf("[ASM] asm_store_variable\n");
     move_reg_addr_disp(buffer, D0, A7, offset, variable_size(n));
 }
 
+void asm_store_variable_u32(int offset, T_BUFFER * buffer) {
+    printf("[ASM] asm_store_variable_u32\n");
+    move_reg_addr_disp(buffer, D0, A7, offset, 4);
+}
+
 void asm_retrieve_variable(T_NODE * n, int offset, T_BUFFER * buffer) {
+    printf("[ASM] asm_retrieve_variable\n");
     move_addr_disp_reg(buffer, A7, D0, offset, variable_size(n));
 }
 
+void asm_retrieve_variable_u32(int offset, T_BUFFER * buffer) {
+    printf("[ASM] asm_retrieve_variable_u32\n");
+    move_addr_disp_reg(buffer, A7, D0, offset, 4);
+}
+
 void asm_call(T_BUFFER * buffer, int offset) {
+    offset = offset - 2;   
     jsr_disp(buffer, offset);
 }
 
 void write_setup(T_BUFFER * buffer, int main_offset) {
     jsr_disp(buffer, main_offset);
     rts(buffer);
+}
+
+void asm_add_variable_and_store(T_NODE * n, int offset, T_BUFFER * buffer) {
+    add_reg_addr_disp(buffer, D0, A7, variable_size(n), offset);
+}
+
+void asm_sub_variable_and_store(T_NODE * n, int offset, T_BUFFER * buffer) {
+    sub_reg_addr_disp(buffer, D0, A7, variable_size(n), offset);
+}
+
+void asm_retrieve_variable_indirect_vs(int size, T_BUFFER * buffer) {
+    printf("[ASM] asm_retrieve_variable_indirect_vs\n");
+    U16 instr = qbit(0, 0, 0, 0) << 14 | ops(size) << 12 | D0 << 9 | M_DATA_REGISTER << 6 | M_ADDRESS << 3 | A0;
+    //U16 instr = qbit(0, 0, 0, 0) << 14 | ops(size) << 12 | A0 << 9 | M_ADDRESS << 6 | M_DATA_REGISTER << 3 | D0;
+    write_u16(buffer, instr);
+}
+
+void asm_store_variable_indirect_vs(int size, T_BUFFER * buffer) {
+    printf("[ASM] move.%c d%d, (a%d)\n", size2char(size), A0, D0);
+    U16 instr = qbit(0, 0, 0, 0) << 14 | ops(size) << 12 | A0 << 9 | M_ADDRESS << 6 | M_DATA_REGISTER << 3 | D0;
+    //U16 instr = qbit(0, 0, 0, 0) << 14 | ops(size) << 12 | D0 << 9 | M_DATA_REGISTER << 6 | M_ADDRESS << 3 | A0;
+    write_u16(buffer, instr);    
+}
+
+void asm_update_jump_length(U8 * ptr, T_BUFFER * buffer, U8 start_offset) {
+    start_offset = buffer->length - start_offset;
+    memcpy( ptr, &start_offset, sizeof(U8) );
 }

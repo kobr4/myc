@@ -907,24 +907,31 @@ void retrieve_setup(T_NODE * up, T_BUFFER * buffer) {
                 asm_imul_eax_value(buffer, type_size(variable_decl_lookup(up, buffer)->prev->type));
 #endif
             }
-
 #ifdef X86
             asm_mov_ebx_eax(buffer);
+#elif defined M68K
+            move_reg_addr(buffer, D0, A0, 4);
 #endif             
         } else {
 #ifdef X86            
             asm_xor_ebx_ebx(buffer);
+#elif defined M68K            
+            movea_imm(buffer, A0, 0);
 #endif            
         }
 
         if (is_global(up, buffer)) {
 #ifdef X86            
             asm_load_eax(variable_decl_lookup(up, buffer)->offset + ELF_ENTRY_VADDR + sizeof(T_ELF) + sizeof(T_ELF_PRG32_HDR), buffer);
-#endif            
+#endif                         
         } else {
 #ifdef X86            
             asm_mov_eax_esp(buffer);
             asm_add_eax_value(buffer, get_variable_offset(up, buffer));
+#elif defined M68K
+    
+            move_addr_reg(buffer, D0, A7, 4); 
+            add_imm(buffer, D0, get_variable_offset(up, buffer), 4);         
 #endif        
         }     
   
@@ -935,6 +942,8 @@ void retrieve_setup(T_NODE * up, T_BUFFER * buffer) {
         }
 #ifdef X86
         asm_add_ebx_eax(buffer);
+#elif defined M68K
+        adda_reg(buffer, D0, A0);
 #endif
 }
 
@@ -953,21 +962,15 @@ T_NODE * retrieve_expression(T_NODE * up, T_BUFFER * buffer) {
 
             T_NODE * decl_n = variable_decl_lookup(up, buffer);
             if (decl_n->prev->type == PTR && decl_n->desc == NULL) {
-#ifdef X86   
-                asm_load_eax(0, buffer);
+                asm_load_u32(0, buffer);
                 asm_retrieve_variable_indirect_vs(type_size(variable_decl_lookup(up, buffer)->prev->prev->type), buffer);
-#endif
-            } else {
-#ifdef X86   
-                asm_load_eax(0, buffer);
+            } else { 
+                asm_load_u32(0, buffer);
                 asm_retrieve_variable_indirect_vs(variable_size(variable_decl_lookup(up, buffer)), buffer);
-#endif
             }            
             
         } else {
-#ifdef X86   
             asm_retrieve_variable_indirect_vs(type_size(variable_decl_lookup(up, buffer)->prev->type), buffer);
-#endif
         }
 }
 
@@ -978,9 +981,7 @@ T_NODE * handle_expression(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         if (up->next->type == ADDADD || up->next->type == SUBSUB) next = up->next;
         last = line(next, -1, buffer);
         int local_offset = add_local_symbol(&anonymous_int, buffer, 1);
-#ifdef X86   
-        asm_store_variable_eax(get_variable_dynamic_offset(local_offset, buffer), buffer); 
-#endif
+        asm_store_variable_u32(get_variable_dynamic_offset(local_offset, buffer), buffer); 
         retrieve_setup(up, buffer);
 
         if (is_pointer_access(up)) {
@@ -989,10 +990,10 @@ T_NODE * handle_expression(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
             asm_mov_ebx_eax(buffer);
 #endif
         }
-#ifdef X86   
-        asm_retrieve_variable_eax(get_variable_dynamic_offset(local_offset, buffer), buffer);
+   
+        asm_retrieve_variable_u32(get_variable_dynamic_offset(local_offset, buffer), buffer);
         asm_store_variable_indirect_vs(type_size(variable_decl_lookup(up, buffer)->prev->type), buffer);
-#endif
+
         unstack_local_symbol(buffer);
     } else {
         retrieve_expression(up, buffer);
@@ -1042,38 +1043,52 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
     } else if (up->type == SUP || up->type == INF || up->type == EQEQ || up->type == NEQ) {
         
         int doffset = add_local_symbol(&anonymous_int, buffer, 1);
-#ifdef X86      
-        asm_store_variable_eax(get_variable_dynamic_offset(doffset, buffer), buffer);
-#endif
+        asm_store_variable_u32(get_variable_dynamic_offset(doffset, buffer), buffer);
         T_NODE * end = line(up->next, -1, buffer);
 #ifdef X86
         asm_retrieve_variable_ebx(get_variable_dynamic_offset(doffset, buffer), buffer);
+#elif defined M68K
+        move_addr_disp_reg(buffer, A7, D1, get_variable_dynamic_offset(doffset, buffer), 4);
 #endif
         unstack_local_symbol(buffer);
 #ifdef X86
         asm_cmp_eax_ebx(buffer);
+#elif defined M68K
+        cmp(buffer, D0, D1, 4);
 #endif
         if (up->type == NEQ) {
 #ifdef X86
             asm_jump_equal(buffer, 10);
+#elif defined M68K
+            bcc(buffer, COND_EQ, 10);            
 #endif
         } else if (up-> type == INF) {
 #ifdef X86
             asm_jump_less_eq(buffer, 10);
+#elif defined M68K
+            bcc(buffer, COND_LEQ, 10);               
 #endif
         } else if (up->type == SUP) {
 #ifdef X86            
             asm_jump_greater_eq(buffer, 10);
+#elif defined M68K
+            bcc(buffer, COND_GEQ, 10);               
 #endif
         } else {
 #ifdef X86            
             asm_jump_not_equal(buffer, 10);
+#elif defined M68K
+            bcc(buffer, COND_NEQ, 10);               
 #endif
         } 
 #ifdef X86
         asm_load_eax(1, buffer);
         asm_jump(buffer, 5);
         asm_load_eax(0, buffer);
+#elif defined M68K
+        asm_load_u32(1, buffer);
+        jmp_disp(buffer, 8);
+        asm_load_u32(0, buffer);
 #endif        
         if (stack_offset != -1) {            
             asm_store_variable(buffer->local_symbol[stack_offset], get_variable_dynamic_offset(stack_offset, buffer), buffer);
@@ -1106,6 +1121,9 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
 #ifdef X86
         asm_test_eax(buffer);
         jgptr = asm_jump_equal(buffer, 0);
+#elif defined M68K
+        tst(buffer, D0, 4);
+        jgptr = bcc(buffer, COND_EQ, 0);
 #endif
         offset = buffer->length;
 
@@ -1114,20 +1132,21 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
 
 #ifdef X86
         jmptr = asm_jump(buffer, 0);
+#elif defined M68K
+        if (last->next != NULL && last->next->type == ELSE) {
+            jmptr = jmp_disp(buffer, 0);
+        }        
 #endif
         offset2 = buffer->length;
 
-#ifdef X86
         asm_update_jump_length(jgptr, buffer, offset);
-#endif
+
         puts("IF SECOND BODY");
         if (last->next != NULL && last->next->type == ELSE) {
             last = block_or_line(get_token_3_null(last->next, DESC, DESC, NEXT), last->next, -1, buffer);
         }
-
-#ifdef X86            
-        asm_update_jump_length(jmptr, buffer, offset2);
-#endif
+            
+        if (jmptr != NULL) asm_update_jump_length(jmptr, buffer, offset2);
 
         return last;
 
@@ -1197,7 +1216,6 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
 #endif
         return last;
     } else if (up->type == EQ) {
-
         error_elt(up->elt, "Should not be here.");
         return up->next;
     } else if (up->type == ADD || up->type == SUB) {
@@ -1205,23 +1223,22 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         
         if (stack_offset != -1) {
             last = one(get_token_alternative(up, DESC, NEXT), stack_offset, buffer);
-#ifdef X86 
+ 
             if (up->type == ADD)
                 asm_add_variable_and_store(buffer->local_symbol[stack_offset], get_variable_dynamic_offset(stack_offset, buffer), buffer);
             if (up->type == SUB) 
-                asm_sub_variable_and_store(buffer->local_symbol[stack_offset], get_variable_dynamic_offset(stack_offset, buffer), buffer);
-#endif            
+                asm_sub_variable_and_store(buffer->local_symbol[stack_offset], get_variable_dynamic_offset(stack_offset, buffer), buffer);            
         } else {
             
             stack_offset = add_local_symbol(&anonymous_int, buffer, 1);            
             asm_store_variable(&anonymous_int, get_variable_dynamic_offset(stack_offset, buffer), buffer);
             last = one(get_token_alternative(up, DESC, NEXT), stack_offset, buffer);
-#ifdef X86            
+           
             if (up->type == ADD)
                 asm_add_variable_and_store(buffer->local_symbol[stack_offset], get_variable_dynamic_offset(stack_offset, buffer), buffer);
             if (up->type == SUB)
                 asm_sub_variable_and_store(buffer->local_symbol[stack_offset], get_variable_dynamic_offset(stack_offset, buffer), buffer);
-#endif
+
             last = line(last->next, stack_offset, buffer);                
             asm_retrieve_variable(&anonymous_int, get_variable_dynamic_offset(stack_offset, buffer), buffer); 
             unstack_local_symbol(buffer);     
@@ -1242,6 +1259,8 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         retrieve_setup(up->next, buffer);
 #ifdef X86 
         asm_mov_eax_ebx(buffer);
+#elif defined M68K
+        move_addr_reg(buffer, D0, A0, 4);
 #endif
         return up->next;
     } else if (up->type == DIV || ((up->type == PTR) && (up->prev != NULL) && (up->prev->type == EXPR))) { 
