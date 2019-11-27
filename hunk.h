@@ -66,7 +66,7 @@ void write_hunk(char * filename, T_BUFFER * buffer) {
     header.last_hunk = 0;
     header.hunk_sizes = (U32*)malloc(sizeof(U32)*1);
     //header.hunk_sizes[0] = l_endian(code.n * 4 + 3 * sizeof(U32));
-    header.hunk_sizes[0] = l_endian(100); 
+    header.hunk_sizes[0] = l_endian(code.n * 4  + 200); 
     
 
     fwrite(&header.magic, sizeof(header.magic), 1, f);
@@ -85,9 +85,11 @@ void write_hunk(char * filename, T_BUFFER * buffer) {
     fwrite(&code_length, 4, 1, f);
     //fwrite(setup_buffer->buffer, (setup_buffer->length / 4) * sizeof(U32), 1, f);
     fwrite(setup_buffer->buffer, setup_buffer->length, 1, f);
+
     fwrite(code.code, code.n * sizeof(U32), 1, f);
     U8 pad = 0;
     for (int i = setup_buffer->length + code.n * sizeof(U32); i < (code.n + setup_buffer->length / 4 + 1) * 4; i++) {
+        printf("PAD %d\n",i);
         fwrite(&pad, sizeof(U8), 1, f);
     }
 
