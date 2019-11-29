@@ -797,7 +797,12 @@ int add_global_symbol(T_NODE * up, T_BUFFER * buffer) {
         }
         
         printf("Current buffer length: %d\n", buffer->length);
-        int value = up->offset + 4 + ELF_ENTRY_VADDR + sizeof(T_ELF) + sizeof(T_ELF_PRG32_HDR);
+        int value = 0;
+#ifdef X86
+        value = up->offset + 4 + ELF_ENTRY_VADDR + sizeof(T_ELF) + sizeof(T_ELF_PRG32_HDR);
+#elif defined M68K
+        value = l_endian(up->offset + 4 + SETUP_LENGTH);
+#endif
         memcpy( &(buffer->buffer[up->offset]), &value , sizeof(value));
 
     } else {
@@ -933,7 +938,8 @@ void retrieve_setup(T_NODE * up, T_BUFFER * buffer) {
 #ifdef X86            
             asm_load_eax(variable_decl_lookup(up, buffer)->offset + ELF_ENTRY_VADDR + sizeof(T_ELF) + sizeof(T_ELF_PRG32_HDR), buffer);
 #elif defined M68K            
-            lea_disp_pc(buffer, A0, variable_decl_lookup(up, buffer)->offset - buffer->length - 2);
+            lea_disp_pc(buffer, A1, variable_decl_lookup(up, buffer)->offset - buffer->length - 2);
+            move_addr_reg(buffer, D0, A1, 4); 
 #endif                         
         } else {
 #ifdef X86            
@@ -949,9 +955,13 @@ void retrieve_setup(T_NODE * up, T_BUFFER * buffer) {
 #ifdef X86
             asm_mov_eax_eax_addr(buffer);
 #elif defined M68K
+            //HACKY stuff need proper reloc
+            //add_imm(buffer, D0, 4, 4);
+            
             move_reg_addr(buffer, D0, A1, 4);
             asm_retrieve_variable_indirect_vs_an(4, buffer, A1);
-            //asm_retrieve_variable_indirect_vs(4, buffer);
+            
+            
 #endif        
         }
 #ifdef X86
@@ -982,12 +992,26 @@ T_NODE * retrieve_expression(T_NODE * up, T_BUFFER * buffer) {
                 asm_load_u32(0, buffer);
                 asm_retrieve_variable_indirect_vs(type_size(variable_decl_lookup(up, buffer)->prev->prev->type), buffer);
             } else { 
+                printf("kikoo %d\n",type_size(variable_decl_lookup(up, buffer)->prev->type));
                 asm_load_u32(0, buffer);
-                asm_retrieve_variable_indirect_vs(variable_size(variable_decl_lookup(up, buffer)), buffer);
+                //asm_retrieve_variable_indirect_vs(variable_size(variable_decl_lookup(up, buffer)), buffer);
+                asm_retrieve_variable_indirect_vs(type_size(variable_decl_lookup(up, buffer)->prev->type), buffer);
             }            
             
         } else {
-            asm_retrieve_variable_indirect_vs(type_size(variable_decl_lookup(up, buffer)->prev->type), buffer);
+            printf("VS size: %d\n", type_size(variable_decl_lookup(up, buffer)->prev->type));
+            int size = type_size(variable_decl_lookup(up, buffer)->prev->type);
+            if (is_pointer_access(up)) {
+                size = type_size(variable_decl_lookup(up, buffer)->prev->prev->type);
+            } else {
+                if (is_array_access(variable_decl_lookup(up, buffer))) {
+                    size = 4;
+                }
+            }
+#ifdef M68K
+            move_imm(buffer, D0, 0, 4);
+#endif 
+            asm_retrieve_variable_indirect_vs(size, buffer);
         }
 }
 
@@ -1159,7 +1183,7 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
 #endif
         offset2 = buffer->length;
 
-        asm_update_jump_length(jgptr, buffer, offset);
+        asm_update_jump_length(jgptr, buffer, offset - 4);
 
         puts("IF SECOND BODY");
         if (last->next != NULL && last->next->type == ELSE) {

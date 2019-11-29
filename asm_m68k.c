@@ -215,7 +215,7 @@ void movea_imm(T_BUFFER * buffer, enum AN an, U32 value) {
 
 //ADD
 void add_reg_addr_disp(T_BUFFER * buffer, enum DN dn, enum AN an, U8 size, int offset) {
-    printf("[ASM][%x] add_reg_addr_disp\n", buffer->length);
+    printf("[ASM][%x] add d%d, (a%d + #%d)\n", buffer->length, dn, an, offset);
     U16 instr = M68K_ADD << 12 | dn << 9 | D_RM2M << 8 | ops2(size) << 6 | M_ADDRESS_DISP << 3 | an;
     write_u16(buffer, instr);
     write_u16(buffer, offset);
@@ -307,25 +307,25 @@ void mulu(T_BUFFER * buffer, enum DN dn, U16 value) {
 
 //MULS
 void muls_reg(T_BUFFER * buffer, enum DN dn1, enum DN dn2) {
-    U16 instr = qbit(1, 1, 0, 0) << 12 | dn1 << 9 | qbit(0, 1, 1, 1) << 6 | M_DATA_REGISTER << 3 | dn2;
+    U16 instr = qbit(1, 1, 0, 0) << 12 | dn2 << 9 | qbit(0, 1, 1, 1) << 6 | M_DATA_REGISTER << 3 | dn1;
     write_u16(buffer, instr);
 }
 
 //MULU
 void mulu_reg(T_BUFFER * buffer, enum DN dn, enum DN dn2) {
-    U16 instr = qbit(1, 1, 0, 0) << 12 | dn << 9 | qbit(0, 0, 1, 1) << 6 | M_DATA_REGISTER << 3 | dn2;
+    U16 instr = qbit(1, 1, 0, 0) << 12 | dn2 << 9 | qbit(0, 0, 1, 1) << 6 | M_DATA_REGISTER << 3 | dn;
     write_u16(buffer, instr);
 }
 
 //DIVS
 void divs_reg(T_BUFFER * buffer, enum DN dn1, enum DN dn2) {
-    U16 instr = qbit(1, 0, 0, 0) << 12 | dn1 << 9 | qbit(0, 1, 1, 1) << 6 | M_DATA_REGISTER << 3 | dn2;
+    U16 instr = qbit(1, 0, 0, 0) << 12 | dn2 << 9 | qbit(0, 1, 1, 1) << 6 | M_DATA_REGISTER << 3 | dn1;
     write_u16(buffer, instr);
 }
 
 //DIVU
 void divu_reg(T_BUFFER * buffer, enum DN dn, enum DN dn2) {
-    U16 instr = qbit(1, 0, 0, 0) << 12 | dn << 9 | qbit(0, 0, 1, 1) << 6 | M_DATA_REGISTER << 3 | dn2;
+    U16 instr = qbit(1, 0, 0, 0) << 12 | dn2 << 9 | qbit(0, 0, 1, 1) << 6 | M_DATA_REGISTER << 3 | dn;
     write_u16(buffer, instr);
 }
 
@@ -448,7 +448,7 @@ void asm_retrieve_variable_indirect_vs(int size, T_BUFFER * buffer) {
 
 void asm_retrieve_variable_indirect_vs_an(int size, T_BUFFER * buffer, enum AN an) {
     //printf("[ASM] asm_retrieve_variable_indirect_vs\n");
-    printf("[ASM][%x] move.%c (a%d), d%d\n", buffer->length, size2char(size), D0, A0);
+    printf("[ASM][%x] move.%c (a%d), d%d\n", buffer->length, size2char(size), an, D0);
     U16 instr = qbit(0, 0, 0, 0) << 14 | ops(size) << 12 | D0 << 9 | M_DATA_REGISTER << 6 | M_ADDRESS << 3 | an;
     write_u16(buffer, instr);
 }

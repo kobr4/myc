@@ -1,5 +1,7 @@
 #!/bin/bash
 
+gcc -D X86 main.c -o main
+
 OUTBIN="./out"
 
 SOURCE="sample.c"

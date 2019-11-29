@@ -10,14 +10,15 @@ int my_strlen(char * a) {
 }
 
 int my_strcmp(char * a, char * b) {
+
     int len_a = my_strlen(a);
     int len_b = my_strlen(b);
-    
+
     if (len_b != len_a) {
         return 2;
-    } 
+    }
 
-    for(int i = 0;i < len_a;i++) {
+    for(int i = 0;i < len_a;i++) {   
         if (a[i] != b[i]) {
             return 1;
         }
