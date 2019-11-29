@@ -1,5 +1,5 @@
 # MYCC open source C compiler
-The goal of this project is to build a minimalistic C compiler that do not requires a PhD to understand and modify. 
+The goal of this project is to build a minimalistic C compiler that does not require a PhD to understand and modify. 
 
 ## Features
 * Targetting x86 32bit instruction set on the Linux platform
@@ -42,7 +42,7 @@ Requires the test library cmocka
   ./run-tests.sh
 ```
 
-## ELF 32bit excecutable format
+## ELF 32bit executable format
 
 The executable format genereted by the compiler is "ELF 32bit" which is the standard executable format for 
 Linux 32bit systems, it can also be ran on Linux 64bit system.

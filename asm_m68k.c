@@ -357,6 +357,14 @@ void divu_imm(T_BUFFER * buffer, enum DN dn, U16 value) {
     write_u16(buffer, value);
 }
 
+//LEA
+void lea_disp_pc(T_BUFFER * buffer, enum AN an, short offset) {
+    printf("[ASM][%x] lea (PC + #%d), a%d\n", buffer->length, offset, an);    
+    U16 instr = qbit(0, 1, 0, 0) << 12 | an << 9 | qbit(0, 1, 1, 1) << 6 | M_DISP_PC << 3  | XN_DISP_PC;
+    write_u16(buffer, instr);
+    write_u16(buffer, offset);
+}
+
 //BCC
 U8 * bcc(T_BUFFER * buffer, U8 q_cond, U16 offset) {
     printf("[ASM][%x] Bcc\n", buffer->length);

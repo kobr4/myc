@@ -932,6 +932,8 @@ void retrieve_setup(T_NODE * up, T_BUFFER * buffer) {
         if (is_global(up, buffer)) {
 #ifdef X86            
             asm_load_eax(variable_decl_lookup(up, buffer)->offset + ELF_ENTRY_VADDR + sizeof(T_ELF) + sizeof(T_ELF_PRG32_HDR), buffer);
+#elif defined M68K            
+            lea_disp_pc(buffer, A0, variable_decl_lookup(up, buffer)->offset - buffer->length - 2);
 #endif                         
         } else {
 #ifdef X86            
