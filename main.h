@@ -34,7 +34,8 @@ enum keyword {
     CUSTOM_T,
     DIV,
     STR,
-    CCHAR
+    CCHAR,
+    ASM
 } T_KEYWORD;
 
 typedef struct T_CTXT {

@@ -83,6 +83,7 @@ enum keyword type(T_ELT * elt) {
     else if (elt->len == 2 && strncmp(elt->str, "--", elt->len) == 0) result = SUBSUB;
     else if (elt->len == 2 && strncmp(elt->str, "do", elt->len) == 0) result = DO;
     else if (elt->len == 5 && strncmp(elt->str, "while", elt->len) == 0) result = WHILE;
+    else if (elt->len == 3 && strncmp(elt->str, "asm", elt->len) == 0) result = ASM;
     else if (strncmp(elt->str, "(", elt->len) == 0) result = PAR_O;
     else if (strncmp(elt->str, ")", elt->len) == 0) result = PAR_C;
     else if (strncmp(elt->str, "{", elt->len) == 0) result = ACC_O;
@@ -266,6 +267,16 @@ T_ELT * tokenize(char * input,int size) {
                 }
                 break; 
             case '{':
+                
+                if (strncmp(current->str, "asm", 3) == 0) {
+                    c++;
+                    current_exp = c;
+                    while(c < size && input[c] != '}') c++;
+                    input[c - 1] = 0;
+                    current = add_token(current, &input[current_exp], c-1-current_exp, line);
+                    current_exp = -1;
+                    break;
+                }
             case '}':
             case ')':
             case '(':
@@ -427,6 +438,7 @@ void create_node_expr(T_NODE * up, T_ELT * current) {
         case AND:
         case STR:
         case CCHAR:
+        case ASM:
             //ctxt.type = t_current;
             current_n = add_next_node(up, current, up);
             create_node_expr(current_n, current->next);      
@@ -1183,8 +1195,11 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
 #endif
         offset2 = buffer->length;
 
+#ifdef X86
+        asm_update_jump_length(jgptr, buffer, offset);        
+#elif defined M68K 
         asm_update_jump_length(jgptr, buffer, offset - 4);
-
+#endif
         puts("IF SECOND BODY");
         if (last->next != NULL && last->next->type == ELSE) {
             last = block_or_line(get_token_3_null(last->next, DESC, DESC, NEXT), last->next, -1, buffer);
@@ -1379,6 +1394,11 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
     } else if (up->type == PAR_O) {
         line(up->desc->next, stack_offset, buffer);
         return up->asc;
+    } else if (up->type == ASM) {
+#ifdef M68K        
+    asm_line(buffer, up->next->elt->str);
+#endif
+        return up->next;
     }
     
     return up;

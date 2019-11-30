@@ -9,8 +9,13 @@
 #include "main.h"
 #include "asm_m68k.c"
 
+int variable_size(T_NODE * up) {
+    return 4;
+}
+
 T_BUFFER * create_buffer() {
     T_BUFFER * buffer = (T_BUFFER *)malloc(sizeof(T_BUFFER));
+    memset(buffer->buffer, 0, sizeof(T_BUFFER));
     buffer->length = 0;
     return buffer;
 }
@@ -79,6 +84,16 @@ static void jmp_test(void **state) {
     free(buffer);    
 }
 
+static void parse_jsr_test(void **state) {
+    T_BUFFER * buffer = create_buffer();
+    U8 tab[] = { 0x4E, 0x8E, 0xFD, 0xD8 };
+    asm_line(buffer, "jsr -552(a6)");
+    assert_memory_equal(buffer->buffer, tab, sizeof(tab));
+    free(buffer);    
+}
+
+
+
 int main(void) {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(rts_test),
@@ -89,6 +104,7 @@ int main(void) {
         cmocka_unit_test(move_imm_u8_test),
         cmocka_unit_test(tst_test),
         cmocka_unit_test(jmp_test),
+        cmocka_unit_test(parse_jsr_test),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

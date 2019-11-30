@@ -374,12 +374,54 @@ U8 * bcc(T_BUFFER * buffer, U8 q_cond, U16 offset) {
     return &(buffer->buffer[buffer->length - 2]);  
 }
 
-int asm_line(T_BUFFER * buffer, char * line) {
-    char * cline = line;
-
-    if (strncmp(cline, "move", 4) == 0) {
-        cline += 4;
+void parse_jsr(T_BUFFER * buffer, char * line) {
+    int offset;
+    char reg[10];
+    int res = sscanf(line, "%d(%s)", &offset, reg);
+    if (res != 2) {
+        res = sscanf(line, "$%d", &offset);
+        if (res == 0) error("Error parsing ASM");
     }
+
+    U8 m_qbit;
+    U8 xn_qbit;
+    if (res == 1) {
+        m_qbit = M_IMMEDIATE;
+        xn_qbit = XN_ABSOLUTE_L;
+    }
+
+    if (res == 2) {
+        if (reg[0] == 'a') m_qbit = M_ADDRESS_REGISTER;
+        if (reg[0] == 'd') m_qbit = M_DATA_REGISTER;
+        xn_qbit = reg[1] - 48;
+    }
+    U8 q1 = qbit(0, 1, 0, 0);
+    U8 q2 = qbit(1, 1, 1, 0);    
+    buffer->buffer[buffer->length++] = qbit_and(q1, q2);
+    buffer->buffer[buffer->length++] = 1 << 7 | 0 << 6 | m_qbit << 3 | xn_qbit;
+    if (res == 1) {
+        write_u32(buffer, offset);
+    } if (res == 2) {
+        write_u16(buffer, offset);
+    }
+}
+
+char * skip_line(char * input) {
+    while (*input == '\n' || *input == ' ') 
+        input++;
+    return input;
+}
+
+int asm_line(T_BUFFER * buffer, char * line) {
+    char * cline = skip_line(line);
+    printf("[ASM][%x] %s",buffer->length, cline);
+    if (strncmp(cline, "move ", 5) == 0) {
+        cline += 5;
+    } else if (strncmp(cline,"jsr ",4) == 0) {
+        cline += 4;
+        parse_jsr(buffer, cline);
+        
+    } else error("Invalid inline ASM.");
     
     return 0;
 }
