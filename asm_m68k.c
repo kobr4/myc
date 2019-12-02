@@ -36,15 +36,19 @@ U8 qbit_and(U8 qb1, U8 qb2) {
 }
 
 #define M_ADDRESS qbit(0, 0, 1, 0)
+#define M_ADDRESS_POST_INC qbit(0, 0, 1, 1)
 #define M_IMMEDIATE qbit(0, 1, 1, 1)
 #define M_DATA_REGISTER qbit(0, 0, 0, 0)
 #define M_ADDRESS_REGISTER qbit(0, 0, 0, 1)
 #define M_ADDRESS_DISP qbit(0, 1, 0, 1)
 #define M_DISP_PC qbit(0, 1, 1, 1)
+#define M_ABS_LS qbit(0, 1 , 1, 1)
 
 #define XN_IMMEDIATE qbit(0, 1, 0, 0)
 #define XN_ABSOLUTE_L qbit(0, 0, 0, 1)
+#define XN_ABSOLUTE_S qbit(0, 0, 0, 0)
 #define XN_DISP_PC qbit(0, 0, 1, 0)
+
 
 #define OPS_B qbit(0, 0, 0, 1)
 #define OPS_W qbit(0, 0, 1, 1)
@@ -374,36 +378,140 @@ U8 * bcc(T_BUFFER * buffer, U8 q_cond, U16 offset) {
     return &(buffer->buffer[buffer->length - 2]);  
 }
 
+U8 parse_operand(char * input, int * offset, U8 mn) {
+    printf("OPERAND: %s\n", input);
+    int res = 0;
+    int reg = 0;
+    res = sscanf(input, "%d(a%d)", offset, &reg);
+    if (res == 2)
+        return mn ? M_ADDRESS_DISP << 3 | reg : reg << 3 | M_ADDRESS_DISP;
+
+    res = sscanf(input, "(a%d)", &reg);
+    if (res == 1)
+        return mn ? M_ADDRESS << 3 | reg : reg << 3 | M_ADDRESS;
+
+    res = sscanf(input, "(a%d)+", &reg);
+    if (res == 1)
+        return mn ? M_ADDRESS_POST_INC << 3 | reg : reg << 3 | M_ADDRESS_POST_INC;
+
+    res = sscanf(input, "#%x", offset);
+    if (res == 1){
+        puts("IMM");
+        return mn ? M_IMMEDIATE << 3 | XN_IMMEDIATE : XN_IMMEDIATE << 3 | M_IMMEDIATE;
+    }
+
+    res = sscanf(input, "(%x).w", offset);
+    if (res == 1) {
+        puts("ABSSHORT");
+        return mn ? M_ABS_LS << 3 | XN_ABSOLUTE_S : XN_ABSOLUTE_S << 3 | M_ABS_LS;
+    }
+
+    res = sscanf(input, "(%x).l", offset);
+    if (res == 1)
+        return mn ? M_ABS_LS << 3 | XN_ABSOLUTE_L : XN_ABSOLUTE_L << 3 | M_ABS_LS;
+
+    res = sscanf(input, "a%d", &reg);
+    if (res == 1)
+        return mn ? M_ADDRESS_REGISTER << 3 | reg : reg << 3 | M_ADDRESS_REGISTER;
+
+    res = sscanf(input, "d%d", &reg);
+    if (res == 1)
+        return mn ? M_DATA_REGISTER << 3 | reg : reg << 3 | M_DATA_REGISTER;
+    
+    return 0;
+}
+
+void token(char * line, char * token, int max) {
+    for(int i = 0; i < max;i++) {
+        if (line[i] == '\n' || line[i] == 0 || line[i] == ' ' || line[i] == ',') {
+            token[i] = 0;
+            return;
+        }
+        token[i]= line[i];
+    }
+}
+
+#define ASM_ERROR error("Error while parsing ASM statement.");
 void parse_jsr(T_BUFFER * buffer, char * line) {
-    int offset;
-    char reg[10];
-    int res = sscanf(line, "%d(%s)", &offset, reg);
-    if (res != 2) {
-        res = sscanf(line, "$%d", &offset);
-        if (res == 0) error("Error parsing ASM");
-    }
-
-    U8 m_qbit;
-    U8 xn_qbit;
-    if (res == 1) {
-        m_qbit = M_IMMEDIATE;
-        xn_qbit = XN_ABSOLUTE_L;
-    }
-
-    if (res == 2) {
-        if (reg[0] == 'a') m_qbit = M_ADDRESS_REGISTER;
-        if (reg[0] == 'd') m_qbit = M_DATA_REGISTER;
-        xn_qbit = reg[1] - 48;
-    }
     U8 q1 = qbit(0, 1, 0, 0);
-    U8 q2 = qbit(1, 1, 1, 0);    
-    buffer->buffer[buffer->length++] = qbit_and(q1, q2);
-    buffer->buffer[buffer->length++] = 1 << 7 | 0 << 6 | m_qbit << 3 | xn_qbit;
-    if (res == 1) {
-        write_u32(buffer, offset);
-    } if (res == 2) {
+    U8 q2 = qbit(1, 1, 1, 0); 
+    int offset;
+    char op[10];
+    token(line, op, 10);
+    U8 mxn = parse_operand(op, &offset, 1);
+    if (mxn == 0) ASM_ERROR;
+    buffer->buffer[buffer->length++] = qbit_and(q1, q2); 
+    buffer->buffer[buffer->length++] = 1 << 7 | 0 << 6 |  mxn;
+    if ( (mxn  >> 3) == M_ADDRESS_DISP) {
+        write_u16(buffer, offset);
+    } 
+}
+
+char * trim(char * input) {
+    while(*input == ' ') input++;
+    return input;
+}
+
+void parse_move(T_BUFFER * buffer, char * line) {
+    U8 size;
+    if (*line != '.') ASM_ERROR;
+    line++;
+    if (*line == 'b') size = 1;
+        else if (*line == 'w') size = 2;
+            else if (*line == 'l') size = 4;
+                else ASM_ERROR;
+    
+    line = trim(++line);          
+    U8 q00 = qbit(0, 0, 0, 0);
+    int offset;
+    int offset2;
+    char op1[15];
+    char op2[15];
+    puts(line);
+    token(line, op1, 15); 
+    while(*line != ',') line++;
+    line = trim(++line);
+    token(line, op2, 15);   
+    U8 mxn = parse_operand(op1, &offset, 1);
+    U8 mxn2 = parse_operand(op2, &offset2, 0);
+    if (mxn == 0 || mxn2 == 0) ASM_ERROR;
+    U16 instr = q00 << 14 | ops(size) << 12 | mxn2 << 6 | mxn;
+
+    write_u16(buffer, instr);
+
+    if ( (mxn  >> 3) == M_ADDRESS_DISP) {
         write_u16(buffer, offset);
     }
+
+    if ( (mxn  >> 3) == M_IMMEDIATE) {
+        switch(size) {
+            case 1 : write_u16(buffer, offset); break;
+            case 2 : write_u16(buffer, offset); break;
+            case 4 : write_u32(buffer, offset); break;
+        }
+    }
+
+    if ( (mxn | 0x7) == XN_ABSOLUTE_L) {
+        write_u32(buffer, offset);
+    }
+
+    if ( (mxn | 0x7) == XN_ABSOLUTE_S) {
+        write_u16(buffer, offset);
+    }    
+
+    
+    if ( (mxn2  | 0x7) == M_ADDRESS_DISP) {
+        write_u16(buffer, offset2);
+    }    
+
+    if ( (mxn2 >> 3) == XN_ABSOLUTE_L) {
+        write_u32(buffer, offset2);
+    }
+
+    if ( (mxn2 >> 3) == XN_ABSOLUTE_S) {
+        write_u16(buffer, offset2);
+    }    
+
 }
 
 char * skip_line(char * input) {
@@ -414,9 +522,10 @@ char * skip_line(char * input) {
 
 int asm_line(T_BUFFER * buffer, char * line) {
     char * cline = skip_line(line);
-    printf("[ASM][%x] %s",buffer->length, cline);
-    if (strncmp(cline, "move ", 5) == 0) {
-        cline += 5;
+    printf("[ASM][%x] %s\n",buffer->length, cline);
+    if (strncmp(cline, "move", 4) == 0) {
+        cline += 4;
+        parse_move(buffer, cline);
     } else if (strncmp(cline,"jsr ",4) == 0) {
         cline += 4;
         parse_jsr(buffer, cline);
