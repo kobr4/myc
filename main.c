@@ -1396,7 +1396,7 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         return up->asc;
     } else if (up->type == ASM) {
 #ifdef M68K        
-    asm_line(buffer, up->next->elt->str);
+    asm_block(buffer, up->next->elt->str);
 #endif
         return up->next;
     }

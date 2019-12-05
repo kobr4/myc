@@ -106,6 +106,12 @@ void write_value(T_BUFFER * buffer, U32 value, U8 size) {
         write_u16(buffer, value);    
 }
 
+void write_u16_ptr(U8 * ptr, U16 value) {
+    *ptr = (value & 0xFF00) >> 8;
+    ptr++;
+    *ptr = (value & 0xFF);   
+}
+
 void moveq(T_BUFFER * buffer, U8 value, enum DN dn) {
     printf("[ASM][%x] moveq #%d, d%d\n", buffer->length, value, dn);
     buffer->buffer[buffer->length++] = dn2byte(dn) << 1 | qbit(0, 1, 1, 1)  << 4;
@@ -378,13 +384,18 @@ U8 * bcc(T_BUFFER * buffer, U8 q_cond, U16 offset) {
     return &(buffer->buffer[buffer->length - 2]);  
 }
 
-U8 parse_operand(char * input, int * offset, U8 mn) {
+#define ASM_ERROR error("Error while parsing ASM statement.");
+
+U8 parse_operand(T_BUFFER * buffer, char * input, U8 mn, U8 size) {
     printf("OPERAND: %s\n", input);
+    int offset = 0;
     int res = 0;
     int reg = 0;
-    res = sscanf(input, "%d(a%d)", offset, &reg);
-    if (res == 2)
+    res = sscanf(input, "%d(a%d)", &offset, &reg);
+    if (res == 2) {
+        write_u16(buffer, offset);
         return mn ? M_ADDRESS_DISP << 3 | reg : reg << 3 | M_ADDRESS_DISP;
+    }
 
     res = sscanf(input, "(a%d)", &reg);
     if (res == 1)
@@ -394,21 +405,27 @@ U8 parse_operand(char * input, int * offset, U8 mn) {
     if (res == 1)
         return mn ? M_ADDRESS_POST_INC << 3 | reg : reg << 3 | M_ADDRESS_POST_INC;
 
-    res = sscanf(input, "#%x", offset);
+    res = sscanf(input, "#%x", &offset);
     if (res == 1){
-        puts("IMM");
+        switch(size) {
+            case 1 : write_u16(buffer, offset); break;
+            case 2 : write_u16(buffer, offset); break;
+            case 4 : write_u32(buffer, offset); break;
+        }        
         return mn ? M_IMMEDIATE << 3 | XN_IMMEDIATE : XN_IMMEDIATE << 3 | M_IMMEDIATE;
     }
 
-    res = sscanf(input, "(%x).w", offset);
+    res = sscanf(input, "(%x).w", &offset);
     if (res == 1) {
-        puts("ABSSHORT");
+        write_u16(buffer, offset);
         return mn ? M_ABS_LS << 3 | XN_ABSOLUTE_S : XN_ABSOLUTE_S << 3 | M_ABS_LS;
     }
 
-    res = sscanf(input, "(%x).l", offset);
-    if (res == 1)
+    res = sscanf(input, "(%x).l", &offset);
+    if (res == 1) {
+        write_u32(buffer, offset);
         return mn ? M_ABS_LS << 3 | XN_ABSOLUTE_L : XN_ABSOLUTE_L << 3 | M_ABS_LS;
+    }
 
     res = sscanf(input, "a%d", &reg);
     if (res == 1)
@@ -418,8 +435,9 @@ U8 parse_operand(char * input, int * offset, U8 mn) {
     if (res == 1)
         return mn ? M_DATA_REGISTER << 3 | reg : reg << 3 | M_DATA_REGISTER;
     
-    return 0;
+    ASM_ERROR;
 }
+
 
 void token(char * line, char * token, int max) {
     for(int i = 0; i < max;i++) {
@@ -431,108 +449,264 @@ void token(char * line, char * token, int max) {
     }
 }
 
-#define ASM_ERROR error("Error while parsing ASM statement.");
+
 void parse_jsr(T_BUFFER * buffer, char * line) {
     U8 q1 = qbit(0, 1, 0, 0);
     U8 q2 = qbit(1, 1, 1, 0); 
-    int offset;
     char op[10];
     token(line, op, 10);
-    U8 mxn = parse_operand(op, &offset, 1);
+    U8 * instr_ptr = &buffer->buffer[buffer->length];
+    buffer->length += 2;
+    U8 mxn = parse_operand(buffer, op, 1, 4);
     if (mxn == 0) ASM_ERROR;
-    buffer->buffer[buffer->length++] = qbit_and(q1, q2); 
-    buffer->buffer[buffer->length++] = 1 << 7 | 0 << 6 |  mxn;
-    if ( (mxn  >> 3) == M_ADDRESS_DISP) {
-        write_u16(buffer, offset);
-    } 
+    write_u16_ptr(instr_ptr, qbit_and(q1, q2) << 8 | 1 << 7 | 0 << 6 |  mxn);
 }
 
 char * trim(char * input) {
-    while(*input == ' ') input++;
+    while(*input == ' ' || *input == '\t' || *input == '\n') input++;
     return input;
 }
 
-void parse_move(T_BUFFER * buffer, char * line) {
-    U8 size;
+char * parse_size(char * line, U8 * size) {
     if (*line != '.') ASM_ERROR;
     line++;
-    if (*line == 'b') size = 1;
-        else if (*line == 'w') size = 2;
-            else if (*line == 'l') size = 4;
+
+    if (*line == 'b') *size = 1;
+        else if (*line == 'w') *size = 2;
+            else if (*line == 'l') *size = 4;
                 else ASM_ERROR;
-    
-    line = trim(++line);          
-    U8 q00 = qbit(0, 0, 0, 0);
-    int offset;
-    int offset2;
-    char op1[15];
-    char op2[15];
-    puts(line);
+    return line++;
+}
+
+void parse_dual_token(char * line, char * op1, char * op2) {
     token(line, op1, 15); 
     while(*line != ',') line++;
     line = trim(++line);
-    token(line, op2, 15);   
-    U8 mxn = parse_operand(op1, &offset, 1);
-    U8 mxn2 = parse_operand(op2, &offset2, 0);
-    if (mxn == 0 || mxn2 == 0) ASM_ERROR;
-    U16 instr = q00 << 14 | ops(size) << 12 | mxn2 << 6 | mxn;
+    token(line, op2, 15);
+} 
 
-    write_u16(buffer, instr);
+U16 build_move(U8 size, U8 mxn, U8 mxn2) {
+    return qbit(0, 0, 0, 0) << 14 | ops(size) << 12 | mxn2 << 6 | mxn;
+}
 
-    if ( (mxn  >> 3) == M_ADDRESS_DISP) {
-        write_u16(buffer, offset);
-    }
+U16 build_cmp(U8 size, U8 mxn, U8 mxn2) {
+    return qbit(1, 0, 1, 1) << 12 | (mxn2 >> 3) << 9 | 0 << 8 | ops2(size) << 6 | mxn;
+}
 
-    if ( (mxn  >> 3) == M_IMMEDIATE) {
-        switch(size) {
-            case 1 : write_u16(buffer, offset); break;
-            case 2 : write_u16(buffer, offset); break;
-            case 4 : write_u32(buffer, offset); break;
-        }
-    }
+U16 build_adda(U8 size, U8 mxn, U8 mxn2) {
+    U8 s;
+    if (size == 2) s = 0;
+    else if (size == 4) s = 1;
+        else ASM_ERROR;
+    return qbit(1, 1, 0, 1) << 12 | (mxn2 >> 3) << 9 | s << 8 | 1 << 7 | 1 << 6 | mxn;
+}
 
-    if ( (mxn | 0x7) == XN_ABSOLUTE_L) {
-        write_u32(buffer, offset);
-    }
+U16 build_suba(U8 size, U8 mxn, U8 mxn2) {
+    U8 s;
+    if (size == 2) s = 0;
+    else if (size == 4) s = 1;
+        else ASM_ERROR;
+    return qbit(1, 0, 0, 1) << 12 | (mxn2 >> 3) << 9 | s << 8 | 1 << 7 | 1 << 6 | mxn;
+}
 
-    if ( (mxn | 0x7) == XN_ABSOLUTE_S) {
-        write_u16(buffer, offset);
-    }    
+U16 build_lea(U8 size, U8 mxn, U8 mxn2) {
+    return qbit(0, 1, 0, 0) << 12 | (mxn2 >> 3) << 9 | qbit(0, 1, 1, 1) << 6 | mxn;
+}
 
+U16 build_divu(U8 size, U8 mxn, U8 mxn2) {
+    return qbit(1, 0, 0, 0) << 12 | (mxn2 >> 3) << 9 | qbit(0, 0, 1, 1) << 6 | mxn;
+}
+
+U16 build_divs(U8 size, U8 mxn, U8 mxn2) {
+    return qbit(1, 0, 0, 0) << 12 | (mxn2 >> 3) << 9 | qbit(0, 1, 1, 1) << 6 | mxn;
+}
+
+U16 build_mulu(U8 size, U8 mxn, U8 mxn2) {
+    return qbit(1, 1, 0, 0) << 12 | (mxn2 >> 3) << 9 | qbit(0, 0, 1, 1) << 6 | mxn;
+}
+
+U16 build_muls(U8 size, U8 mxn, U8 mxn2) {
+    return qbit(1, 1, 0, 0) << 12 | (mxn2 >> 3) << 9 | qbit(0, 1, 1, 1) << 6 | mxn;
+}
+
+U16 build_cmpi(U8 size, U8 mxn, U8 mxn2) {
+    return qbit(0, 0, 0, 0) << 12 | qbit(1, 1, 0, 0) << 8 | ops2(size) << 6 | mxn2 >> 3 | ((mxn2 & qbit(0, 1, 1, 1)) << 3);
+}
+
+U16 build_andi(U8 size, U8 mxn, U8 mxn2) {
+    return qbit(0, 0, 0, 0) << 12 | qbit(0, 0, 1, 0) << 8 | ops2(size) << 6 | mxn2 >> 3 | ((mxn2 & qbit(0, 1, 1, 1)) << 3);
+}
+
+U16 build_addi(U8 size, U8 mxn, U8 mxn2) {
+    return qbit(0, 0, 0, 0) << 12 | qbit(0, 1, 1, 0) << 8 | ops2(size) << 6 | mxn2 >> 3 | ((mxn2 & qbit(0, 1, 1, 1)) << 3);
+}
+
+U16 build_subi(U8 size, U8 mxn, U8 mxn2) {
+    return qbit(0, 0, 0, 0) << 12 | qbit(0, 1, 0, 0) << 8 | ops2(size) << 6 | mxn2 >> 3 | ((mxn2 & qbit(0, 1, 1, 1)) << 3);
+}
+
+U16 build_eori(U8 size, U8 mxn, U8 mxn2) {
+    return qbit(0, 0, 0, 0) << 12 | qbit(1, 0, 1, 0) << 8 | ops2(size) << 6 | mxn2 >> 3 | ((mxn2 & qbit(0, 1, 1, 1)) << 3);
+}
+
+U16 build_ori(U8 size, U8 mxn, U8 mxn2) {
+    return qbit(0, 0, 0, 0) << 12 | qbit(0, 0, 0, 0) << 8 | ops2(size) << 6 | mxn2 >> 3 | ((mxn2 & qbit(0, 1, 1, 1)) << 3);
+}
+
+U16 build_add(U8 size, U8 dn, U8 direction, U8 mxn) {
+    return qbit(1, 1, 0, 1) << 12 |  dn << 9 |  direction << 8 |  ops2(size) << 6 | mxn;
+}
+
+U16 build_and(U8 size, U8 dn, U8 direction, U8 mxn) {
+    return qbit(1, 1, 0, 0) << 12 |  dn << 9 |  direction << 8 |  ops2(size) << 6 | mxn;
+}
+
+U16 build_or(U8 size, U8 dn, U8 direction, U8 mxn) {
+    return qbit(1, 0, 0, 0) << 12 |  dn << 9 |  direction << 8 |  ops2(size) << 6 | mxn;
+}
+
+U16 build_sub(U8 size, U8 dn, U8 direction, U8 mxn) {
+    return qbit(1, 0, 0, 1) << 12 |  dn << 9 |  direction << 8 |  ops2(size) << 6 | mxn;
+}
+
+void parse_dual_op(T_BUFFER * buffer, char * line, U16(*build)(U8, U8, U8) ) {
+    char op1[15], op2[15];
+    U8 size;
+ 
+    line = parse_size(line, &size);
+    line = trim(++line);    
+    parse_dual_token(line, op1, op2);      
+   
+    U8 * instr_ptr = &buffer->buffer[buffer->length];
+    buffer->length += 2;    
+    U8 mxn = parse_operand(buffer, op1, 1, size);
+    U8 mxn2 = parse_operand(buffer, op2, 0, size);
     
-    if ( (mxn2  | 0x7) == M_ADDRESS_DISP) {
-        write_u16(buffer, offset2);
-    }    
+    U16 instr = build(size, mxn, mxn2);
+    write_u16_ptr(instr_ptr, instr);
+}
 
-    if ( (mxn2 >> 3) == XN_ABSOLUTE_L) {
-        write_u32(buffer, offset2);
+void parse_dual_op_direction(T_BUFFER * buffer, char * line, U16(*build)(U8, U8, U8, U8)) {
+    char op1[15], op2[15];
+    U8 size;    
+    U8 direction = D_RM2D;
+    line = parse_size(line, &size);
+    line = trim(++line);          
+    parse_dual_token(line, op1, op2);
+
+    U8 * instr_ptr = &buffer->buffer[buffer->length];
+    buffer->length += 2;    
+
+    U32 dn;
+    U8 mxn;
+    int res = sscanf(op2, "d%d", &dn);
+    if (res == 0) {
+        res = sscanf(op1, "d%d", &dn);
+        if (res == 0) ASM_ERROR;
+        mxn = parse_operand(buffer, op2, 1, size);
+        direction = D_RM2M;
+    } else {
+        mxn = parse_operand(buffer, op1, 1, size);
     }
-
-    if ( (mxn2 >> 3) == XN_ABSOLUTE_S) {
-        write_u16(buffer, offset2);
-    }    
-
+    U16 instr = build(size, dn, direction, mxn);
+    
+    write_u16_ptr(instr_ptr, instr);
 }
 
 char * skip_line(char * input) {
     while (*input == '\n' || *input == ' ') 
         input++;
+        
     return input;
 }
 
 int asm_line(T_BUFFER * buffer, char * line) {
     char * cline = skip_line(line);
     printf("[ASM][%x] %s\n",buffer->length, cline);
-    if (strncmp(cline, "move", 4) == 0) {
+    if (strncmp(cline, "movea", 5) == 0) {
+        cline += 5;
+        parse_dual_op(buffer, cline, build_move);
+    } else if (strncmp(cline, "move", 4) == 0) {
         cline += 4;
-        parse_move(buffer, cline);
+        parse_dual_op(buffer, cline, build_move);
     } else if (strncmp(cline,"jsr ",4) == 0) {
         cline += 4;
         parse_jsr(buffer, cline);
-        
+    } else if (strncmp(cline, "andi", 4) == 0) {
+        cline += 4;
+        parse_dual_op(buffer, cline, build_andi);
+    } else if (strncmp(cline, "and", 3) == 0) {
+        cline += 3;
+        parse_dual_op_direction(buffer, cline, build_and);
+    } else if (strncmp(cline, "addi", 4) == 0) {
+        cline += 4;
+        parse_dual_op(buffer, cline, build_addi);
+    } else if (strncmp(cline, "adda", 4) == 0) {
+        cline += 4;
+        parse_dual_op(buffer, cline, build_adda);
+    } else if (strncmp(cline, "divu", 4) == 0) {
+        cline += 4;
+        parse_dual_op(buffer, cline, build_divu);
+    } else if (strncmp(cline, "divs", 4) == 0) {
+        cline += 4;
+        parse_dual_op(buffer, cline, build_divs);
+    } else if (strncmp(cline, "mulu", 4) == 0) {
+        cline += 4;
+        parse_dual_op(buffer, cline, build_mulu);
+    } else if (strncmp(cline, "muls", 4) == 0) {
+        cline += 4;
+        parse_dual_op(buffer, cline, build_muls);
+    } else if (strncmp(cline, "add", 3) == 0) {
+        cline += 3;
+        parse_dual_op_direction(buffer, cline, build_add);
+    } else if (strncmp(cline, "lea", 3) == 0) {
+        cline += 3;
+        parse_dual_op(buffer, cline, build_lea);
+    } else if (strncmp(cline, "cmpi", 4) == 0) {
+        cline += 4;
+        parse_dual_op(buffer, cline, build_cmpi);
+    } else if (strncmp(cline, "cmp", 3) == 0) {
+        cline += 3;
+        parse_dual_op(buffer, cline, build_cmp);
+    } else if (strncmp(cline, "sub", 3) == 0) {
+        cline += 3;
+        parse_dual_op_direction(buffer, cline, build_sub);
+    } else if (strncmp(cline, "subi", 4) == 0) {
+        cline += 4;
+        parse_dual_op(buffer, cline, build_subi);
+    } else if (strncmp(cline, "suba", 4) == 0) {
+        cline += 4;
+        parse_dual_op(buffer, cline, build_suba);
+    } else if (strncmp(cline, "ori", 3) == 0) {
+        cline += 3;
+        parse_dual_op(buffer, cline, build_ori);
+    } else if (strncmp(cline, "or", 2) == 0) {
+        cline += 2;
+        parse_dual_op_direction(buffer, cline, build_or);
+    }else if (strncmp(cline, "eori", 4) == 0) {
+        cline += 4;
+        parse_dual_op(buffer, cline, build_eori);
     } else error("Invalid inline ASM.");
     
     return 0;
+}
+
+char * skip_to_endline(char * input) {
+    while (*input != '\n' && *input != 0) input++;
+    printf("[OUT]=%s\n", input);
+    input++;
+    return input;
+}
+
+int asm_block(T_BUFFER * buffer, char * block) {
+    block = trim(block);
+    while(*block != 0) {
+        trim(block);
+        asm_line(buffer, block);
+        block = skip_to_endline(block);
+        block = trim(block);
+        printf("END: %d\n", *block);
+    }
 }
 
 //Generic functions
