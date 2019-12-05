@@ -68,6 +68,17 @@ U8 qbit_and(U8 qb1, U8 qb2) {
 #define COND_EQ qbit(0, 1, 1, 1)
 #define COND_LEQ qbit(1, 1, 1, 1)
 #define COND_NEQ qbit(0, 1, 1, 0)
+#define COND_HI qbit(0, 0, 1, 0)
+#define COND_CC qbit(0, 1, 0, 0)
+#define COND_CS qbit(0, 1, 0, 1)
+#define COND_HI qbit(0, 1, 0, 0)
+#define COND_LS qbit(0, 0, 1, 1)
+#define COND_VC qbit(1, 0, 0, 0)
+#define COND_VS qbit(1, 0, 0, 1)
+#define COND_PL qbit(1, 0, 1, 0)
+#define COND_MI qbit(1, 0, 1, 1)
+#define COND_LT qbit(1, 1, 0, 1)
+#define COND_GT qbit(1, 1, 1, 0)
 
 
 U8 ops(U8 size) {
@@ -384,6 +395,9 @@ U8 * bcc(T_BUFFER * buffer, U8 q_cond, U16 offset) {
     return &(buffer->buffer[buffer->length - 2]);  
 }
 
+
+
+
 #define ASM_ERROR error("Error while parsing ASM statement.");
 
 U8 parse_operand(T_BUFFER * buffer, char * input, U8 mn, U8 size) {
@@ -569,6 +583,46 @@ U16 build_sub(U8 size, U8 dn, U8 direction, U8 mxn) {
     return qbit(1, 0, 0, 1) << 12 |  dn << 9 |  direction << 8 |  ops2(size) << 6 | mxn;
 }
 
+U16 build_bcc(U8 size, U8 mxn, U8 condition) {
+   if (size == 1) error("ASM Bcc byte displacement not supported.");
+   if (size == 4) error("ASM Bcc long displacement not supported.");
+   return qbit(0, 1, 1, 0) << 12 | condition << 8 | (size == 2 ? 0x0 : 0xFF);
+}
+
+U16 build_beq(U8 size, U8 mxn) {
+    return build_bcc(size, mxn, COND_EQ); 
+}
+
+U16 build_bge(U8 size, U8 mxn) {
+    return build_bcc(size, mxn, COND_GEQ); 
+}
+
+U16 build_ble(U8 size, U8 mxn) {
+    return build_bcc(size, mxn, COND_LEQ); 
+}
+
+U16 build_bne(U8 size, U8 mxn) {
+    return build_bcc(size, mxn, COND_NEQ); 
+}
+
+U16 build_tst(U8 size, U8 mxn) {
+    return qbit(0, 1, 0, 0) << 12 | qbit(1, 0, 1, 0) << 8 | ops2(size) << 6 | mxn;
+}
+
+void parse_single_op(T_BUFFER * buffer, char * line, U16(*build)(U8, U8)) {
+    char op[15];
+    U8 size;
+    U8 mxn;
+    line = parse_size(line, &size);
+    line = trim(++line);
+    token(line, op, 15);
+    U8 * instr_ptr = &buffer->buffer[buffer->length];
+    buffer->length += 2;
+    mxn = parse_operand(buffer, op, 1, size);
+    U16 instr = build(size, mxn);
+    write_u16_ptr(instr_ptr, instr);
+}
+
 void parse_dual_op(T_BUFFER * buffer, char * line, U16(*build)(U8, U8, U8) ) {
     char op1[15], op2[15];
     U8 size;
@@ -668,24 +722,39 @@ int asm_line(T_BUFFER * buffer, char * line) {
     } else if (strncmp(cline, "cmp", 3) == 0) {
         cline += 3;
         parse_dual_op(buffer, cline, build_cmp);
-    } else if (strncmp(cline, "sub", 3) == 0) {
-        cline += 3;
-        parse_dual_op_direction(buffer, cline, build_sub);
     } else if (strncmp(cline, "subi", 4) == 0) {
         cline += 4;
         parse_dual_op(buffer, cline, build_subi);
     } else if (strncmp(cline, "suba", 4) == 0) {
         cline += 4;
         parse_dual_op(buffer, cline, build_suba);
+    } else if (strncmp(cline, "sub", 3) == 0) {
+        cline += 3;
+        parse_dual_op_direction(buffer, cline, build_sub);
     } else if (strncmp(cline, "ori", 3) == 0) {
         cline += 3;
         parse_dual_op(buffer, cline, build_ori);
     } else if (strncmp(cline, "or", 2) == 0) {
         cline += 2;
         parse_dual_op_direction(buffer, cline, build_or);
-    }else if (strncmp(cline, "eori", 4) == 0) {
+    } else if (strncmp(cline, "eori", 4) == 0) {
         cline += 4;
         parse_dual_op(buffer, cline, build_eori);
+    } else if (strncmp(cline, "ble", 3) == 0) {
+        cline += 3;
+        parse_single_op(buffer, cline, build_ble);
+    } else if (strncmp(cline, "beq", 3) == 0) {
+        cline += 3;
+        parse_single_op(buffer, cline, build_beq);
+    } else if (strncmp(cline, "bne", 3) == 0) {
+        cline += 3;
+        parse_single_op(buffer, cline, build_bne);
+    } else if (strncmp(cline, "bge", 3) == 0) {
+        cline += 3;
+        parse_single_op(buffer, cline, build_bge);
+    } else if (strncmp(cline, "tst", 3) == 0) {
+        cline += 3;
+        parse_single_op(buffer, cline, build_tst);
     } else error("Invalid inline ASM.");
     
     return 0;

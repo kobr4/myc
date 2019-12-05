@@ -294,6 +294,39 @@ static void parse_eori_test2(void **state) {
     free(buffer);
 }
 
+static void parse_beq_test(void **state) {
+    T_BUFFER * buffer = create_buffer();
+    U8 tab[] = { 0x67, 0x00, 0x00, 0x10 };
+    asm_line(buffer, "beq.w #10");
+    assert_memory_equal(buffer->buffer, tab, sizeof(tab));
+    free(buffer);
+}
+
+static void parse_ble_test(void **state) {
+    T_BUFFER * buffer = create_buffer();
+    U8 tab[] = { 0x6F, 0x00, 0x00, 0x10 };
+    asm_line(buffer, "ble.w #10");
+    assert_memory_equal(buffer->buffer, tab, sizeof(tab));
+    free(buffer);
+}
+
+static void parse_bge_test(void **state) {
+    T_BUFFER * buffer = create_buffer();
+    U8 tab[] = { 0x6C, 0x00, 0x00, 0x10 };
+    asm_line(buffer, "bge.w #10");
+    assert_memory_equal(buffer->buffer, tab, sizeof(tab));
+    free(buffer);
+}
+
+static void parse_bne_test(void **state) {
+    T_BUFFER * buffer = create_buffer();
+    U8 tab[] = { 0x66, 0x00, 0x00, 0x10 };
+    asm_line(buffer, "bne.w #10");
+    assert_memory_equal(buffer->buffer, tab, sizeof(tab));
+    free(buffer);
+}
+
+
 int main(void) {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(rts_test),
@@ -329,7 +362,11 @@ int main(void) {
         cmocka_unit_test(parse_ori_test),
         cmocka_unit_test(parse_ori_test2),
         cmocka_unit_test(parse_eori_test),
-        cmocka_unit_test(parse_eori_test2),        
+        cmocka_unit_test(parse_eori_test2),
+        cmocka_unit_test(parse_beq_test),
+        cmocka_unit_test(parse_ble_test),
+        cmocka_unit_test(parse_bne_test),
+        cmocka_unit_test(parse_bge_test),             
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }
