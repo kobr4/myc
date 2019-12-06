@@ -84,7 +84,18 @@ void error(char * msg) {
 }
 
 int variable_size(T_NODE * up);
+
+int get_variable_dynamic_offset(int target, T_BUFFER * buffer) {
+    int offset = 0;
+    for (int i = buffer->local_symbol_count - 1; i > target ;i--) {
+        offset += variable_size(buffer->local_symbol[i]);
+    }
+    return offset;
+}
+
+
 void error_elt(T_ELT * elt, char * msg);
+
 
 #define MAIN
 #endif

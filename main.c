@@ -648,14 +648,6 @@ int get_variable_offset(T_NODE * target, T_BUFFER * buffer) {
     return offset;
 }
 
-int get_variable_dynamic_offset(int target, T_BUFFER * buffer) {
-    int offset = 0;
-    for (int i = buffer->local_symbol_count - 1; i > target ;i--) {
-        offset += variable_size(buffer->local_symbol[i]);
-    }
-    return offset;
-}
-
 int get_offset_from_global_symbol(T_NODE * target, T_BUFFER * buffer) {
     for (int i = 0; i < buffer->global_symbol_count;i++) {        
         if (buffer->global_symbol[i] != NULL && is_matching(buffer->global_symbol[i], target)) {

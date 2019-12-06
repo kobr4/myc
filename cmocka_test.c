@@ -422,6 +422,50 @@ static void parse_beq_label_test(void **state) {
     free(buffer);
 }
 
+static void parse_move_to_local_symbol_test(void **state) {
+    T_ELT elt_int;
+    T_NODE anonymous_int;
+    elt_int.next = NULL;
+    elt_int.str = "toto";
+    elt_int.len = strlen(elt_int.str);
+    anonymous_int.elt = &elt_int;
+    anonymous_int.prev = &anonymous_int;
+    anonymous_int.type = INT;
+
+
+    T_BUFFER * buffer = create_buffer();
+    buffer->local_symbol[0] = &anonymous_int;
+    buffer->local_symbol_count++;
+
+    U8 tab[] = { 0x2F, 0x41, 0x0, 0x00 };
+    asm_line(NULL, buffer, "move.l d1, toto");
+    assert_memory_equal(buffer->buffer, tab, sizeof(tab));
+    assert_int_equal(buffer->length, sizeof(tab));
+    free(buffer);
+}
+
+static void parse_move_from_local_symbol_test(void **state) {
+    T_ELT elt_int;
+    T_NODE anonymous_int;
+    elt_int.next = NULL;
+    elt_int.str = "toto";
+    elt_int.len = strlen(elt_int.str);
+    anonymous_int.elt = &elt_int;
+    anonymous_int.prev = &anonymous_int;
+    anonymous_int.type = INT;
+
+
+    T_BUFFER * buffer = create_buffer();
+    buffer->local_symbol[0] = &anonymous_int;
+    buffer->local_symbol_count++;
+
+    U8 tab[] = { 0x22, 0x2F, 0x0, 0x00 };
+    asm_line(NULL, buffer, "move.l toto, d1");
+    assert_memory_equal(buffer->buffer, tab, sizeof(tab));
+    assert_int_equal(buffer->length, sizeof(tab));
+    free(buffer);
+}
+
 
 int main(void) {
     const struct CMUnitTest tests[] = {
@@ -469,7 +513,9 @@ int main(void) {
         cmocka_unit_test(parse_bvs_test),
         cmocka_unit_test(parse_bhi_test),
         cmocka_unit_test(parse_movea_test),
-        cmocka_unit_test(parse_beq_label_test),                       
+        cmocka_unit_test(parse_beq_label_test),
+        cmocka_unit_test(parse_move_to_local_symbol_test),
+        cmocka_unit_test(parse_move_from_local_symbol_test),                  
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

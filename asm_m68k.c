@@ -408,11 +408,32 @@ U8 * bcc(T_BUFFER * buffer, U8 q_cond, U16 offset) {
 
 #define ASM_ERROR error("Error while parsing ASM statement.");
 
+int retrieve_local_symbol(T_BUFFER * buffer, char * input) {
+    for (int i = 0;i < buffer->local_symbol_count;i++) {
+        
+        if (buffer->local_symbol[i]->elt != NULL && strlen(input) == buffer->local_symbol[i]->elt->len)
+            if (strncmp(buffer->local_symbol[i]->elt->str, input, strlen(input)) == 0) {
+                return i;
+            }
+    }
+    return -1;
+}
+
+
 U8 parse_operand(T_BUFFER * buffer, char * input, U8 mn, U8 size) {
     printf("OPERAND: %s\n", input);
     int offset = 0;
     int res = 0;
     int reg = 0;
+
+    int i = 0;
+    
+    if ((i = retrieve_local_symbol(buffer, input)) !=  -1) {
+        int doffset= get_variable_dynamic_offset(i, buffer);
+        write_u16(buffer, doffset);
+        return mn ? M_ADDRESS_DISP << 3 | A7 : A7 << 3 | M_ADDRESS_DISP;
+    }
+
     res = sscanf(input, "%d(a%d)", &offset, &reg);
     if (res == 2) {
         write_u16(buffer, offset);
