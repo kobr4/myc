@@ -71,7 +71,6 @@ U8 qbit_and(U8 qb1, U8 qb2) {
 #define COND_HI qbit(0, 0, 1, 0)
 #define COND_CC qbit(0, 1, 0, 0)
 #define COND_CS qbit(0, 1, 0, 1)
-#define COND_HI qbit(0, 1, 0, 0)
 #define COND_LS qbit(0, 0, 1, 1)
 #define COND_VC qbit(1, 0, 0, 0)
 #define COND_VS qbit(1, 0, 0, 1)
@@ -79,6 +78,15 @@ U8 qbit_and(U8 qb1, U8 qb2) {
 #define COND_MI qbit(1, 0, 1, 1)
 #define COND_LT qbit(1, 1, 0, 1)
 #define COND_GT qbit(1, 1, 1, 0)
+
+#define MAX_LABEL 10
+#define MAX_LABEL_LENGTH 20
+
+typedef struct T_ASM_CTXT {
+    char labels[MAX_LABEL][MAX_LABEL_LENGTH];
+    U32 label_offset[MAX_LABEL];
+    int label_count;
+} T_ASM_CTXT;
 
 
 U8 ops(U8 size) {
@@ -477,6 +485,7 @@ void parse_jsr(T_BUFFER * buffer, char * line) {
 }
 
 char * trim(char * input) {
+    if (*input == 0) return input;
     while(*input == ' ' || *input == '\t' || *input == '\n') input++;
     return input;
 }
@@ -583,30 +592,61 @@ U16 build_sub(U8 size, U8 dn, U8 direction, U8 mxn) {
     return qbit(1, 0, 0, 1) << 12 |  dn << 9 |  direction << 8 |  ops2(size) << 6 | mxn;
 }
 
-U16 build_bcc(U8 size, U8 mxn, U8 condition) {
+U16 build_bcc_cond(U8 size, U8 mxn, U8 condition) {
    if (size == 1) error("ASM Bcc byte displacement not supported.");
    if (size == 4) error("ASM Bcc long displacement not supported.");
    return qbit(0, 1, 1, 0) << 12 | condition << 8 | (size == 2 ? 0x0 : 0xFF);
 }
 
 U16 build_beq(U8 size, U8 mxn) {
-    return build_bcc(size, mxn, COND_EQ); 
+    return build_bcc_cond(size, mxn, COND_EQ); 
 }
 
 U16 build_bge(U8 size, U8 mxn) {
-    return build_bcc(size, mxn, COND_GEQ); 
+    return build_bcc_cond(size, mxn, COND_GEQ); 
 }
 
 U16 build_ble(U8 size, U8 mxn) {
-    return build_bcc(size, mxn, COND_LEQ); 
+    return build_bcc_cond(size, mxn, COND_LEQ); 
 }
 
 U16 build_bne(U8 size, U8 mxn) {
-    return build_bcc(size, mxn, COND_NEQ); 
+    return build_bcc_cond(size, mxn, COND_NEQ); 
 }
+
+U16 build_bcc(U8 size, U8 mxn) {
+    return build_bcc_cond(size, mxn, COND_CC); 
+}
+
+U16 build_bcs(U8 size, U8 mxn) {
+    return build_bcc_cond(size, mxn, COND_CS); 
+}
+
+U16 build_bvc(U8 size, U8 mxn) {
+    return build_bcc_cond(size, mxn, COND_VC); 
+}
+
+U16 build_bvs(U8 size, U8 mxn) {
+    return build_bcc_cond(size, mxn, COND_VS); 
+}
+
+U16 build_bhi(U8 size, U8 mxn) {
+    return build_bcc_cond(size, mxn, COND_HI); 
+}
+
 
 U16 build_tst(U8 size, U8 mxn) {
     return qbit(0, 1, 0, 0) << 12 | qbit(1, 0, 1, 0) << 8 | ops2(size) << 6 | mxn;
+}
+
+
+int retrieve_label(T_ASM_CTXT * ctxt, char * input) {
+    for (int i = 0;ctxt != NULL && i < ctxt->label_count;i++) {
+        if (strcmp(ctxt->labels[i], input) == 0) {
+            return i;
+        }
+    }
+    return -1;
 }
 
 void parse_single_op(T_BUFFER * buffer, char * line, U16(*build)(U8, U8)) {
@@ -619,6 +659,27 @@ void parse_single_op(T_BUFFER * buffer, char * line, U16(*build)(U8, U8)) {
     U8 * instr_ptr = &buffer->buffer[buffer->length];
     buffer->length += 2;
     mxn = parse_operand(buffer, op, 1, size);
+    U16 instr = build(size, mxn);
+    write_u16_ptr(instr_ptr, instr);
+}
+
+void parse_branch_op(T_ASM_CTXT * ctxt, T_BUFFER * buffer, char * line, U16(*build)(U8, U8)) {
+    char op[20];
+    U8 size;
+    U8 mxn;
+    line = parse_size(line, &size);
+    line = trim(++line);
+    token(line, op, 20);
+    U8 * instr_ptr = &buffer->buffer[buffer->length];
+    buffer->length += 2;
+    int i;
+    if ((i = retrieve_label(ctxt, op)) != -1) {
+        mxn = M_DISP_PC << 3 | XN_DISP_PC;
+        write_u16(buffer, ctxt->label_offset[i] - buffer->length );
+    } else {
+        mxn = parse_operand(buffer, op, 1, size);
+    }
+    
     U16 instr = build(size, mxn);
     write_u16_ptr(instr_ptr, instr);
 }
@@ -674,8 +735,25 @@ char * skip_line(char * input) {
     return input;
 }
 
-int asm_line(T_BUFFER * buffer, char * line) {
+void add_label(T_ASM_CTXT * ctxt, char * label, U32 offset) {
+    int i;
+    for (i = 0;label[i] != 0 && label[i] != '\n'; i++) ctxt->labels[ctxt->label_count][i] = label[i];
+    ctxt->label_offset[ctxt->label_count] = offset;
+    ctxt->labels[ctxt->label_count++][i] = 0;
+    
+}
+
+int asm_line(T_ASM_CTXT * ctxt, T_BUFFER * buffer, char * line) {
     char * cline = skip_line(line);
+    
+    char s_label[20];
+    char c;
+    if (ctxt != NULL && sscanf(cline, "%s %[:]%*s", s_label, &c) == 2) {
+        printf("[ASM] Adding label: %s\n", s_label);
+        add_label(ctxt, s_label, buffer->length);
+        return 0;
+    }
+    
     printf("[ASM][%x] %s\n",buffer->length, cline);
     if (strncmp(cline, "movea", 5) == 0) {
         cline += 5;
@@ -742,16 +820,31 @@ int asm_line(T_BUFFER * buffer, char * line) {
         parse_dual_op(buffer, cline, build_eori);
     } else if (strncmp(cline, "ble", 3) == 0) {
         cline += 3;
-        parse_single_op(buffer, cline, build_ble);
+        parse_branch_op(ctxt, buffer, cline, build_ble);
     } else if (strncmp(cline, "beq", 3) == 0) {
         cline += 3;
-        parse_single_op(buffer, cline, build_beq);
+        parse_branch_op(ctxt, buffer, cline, build_beq);
     } else if (strncmp(cline, "bne", 3) == 0) {
         cline += 3;
-        parse_single_op(buffer, cline, build_bne);
+        parse_branch_op(ctxt, buffer, cline, build_bne);
     } else if (strncmp(cline, "bge", 3) == 0) {
         cline += 3;
-        parse_single_op(buffer, cline, build_bge);
+        parse_branch_op(ctxt, buffer, cline, build_bge);
+    } else if (strncmp(cline, "bvs", 3) == 0) {
+        cline += 3;
+        parse_branch_op(ctxt, buffer, cline, build_bvs);
+    } else if (strncmp(cline, "bcc", 3) == 0) {
+        cline += 3;
+        parse_branch_op(ctxt, buffer, cline, build_bcc);
+    } else if (strncmp(cline, "bcs", 3) == 0) {
+        cline += 3;
+        parse_branch_op(ctxt, buffer, cline, build_bcs);
+    } else if (strncmp(cline, "bvc", 3) == 0) {
+        cline += 3;
+        parse_branch_op(ctxt, buffer, cline, build_bvc);
+    } else if (strncmp(cline, "bhi", 3) == 0) {
+        cline += 3;
+        parse_branch_op(ctxt, buffer, cline, build_bhi);
     } else if (strncmp(cline, "tst", 3) == 0) {
         cline += 3;
         parse_single_op(buffer, cline, build_tst);
@@ -762,19 +855,19 @@ int asm_line(T_BUFFER * buffer, char * line) {
 
 char * skip_to_endline(char * input) {
     while (*input != '\n' && *input != 0) input++;
-    printf("[OUT]=%s\n", input);
     input++;
     return input;
 }
 
 int asm_block(T_BUFFER * buffer, char * block) {
+    T_ASM_CTXT ctxt;
+    ctxt.label_count = 0;
     block = trim(block);
     while(*block != 0) {
         trim(block);
-        asm_line(buffer, block);
+        asm_line(&ctxt, buffer, block);
         block = skip_to_endline(block);
         block = trim(block);
-        printf("END: %d\n", *block);
     }
 }
 
