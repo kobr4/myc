@@ -1,4 +1,5 @@
 #include "main.h"
+#include <stdlib.h>
 
 enum DN {
     D0,
@@ -421,7 +422,7 @@ int retrieve_local_symbol(T_BUFFER * buffer, char * input) {
 
 
 U8 parse_operand(T_BUFFER * buffer, char * input, U8 mn, U8 size) {
-    printf("OPERAND: %s\n", input);
+    //printf("OPERAND: %s\n", input);
     int offset = 0;
     int res = 0;
     int reg = 0;
@@ -775,7 +776,14 @@ int asm_line(T_ASM_CTXT * ctxt, T_BUFFER * buffer, char * line) {
         return 0;
     }
     
-    printf("[ASM][%x] %s\n",buffer->length, cline);
+    char s_line[256];
+    int i = 0;
+    while(line[i] != 0 && line[i] != '\n') {
+        s_line[i] = line[i];
+        i++;
+    }
+    s_line[i] = 0;
+    printf("[ASM][%x] %s\n",buffer->length, s_line);
     if (strncmp(cline, "movea", 5) == 0) {
         cline += 5;
         parse_dual_op(buffer, cline, build_move);

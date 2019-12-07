@@ -525,7 +525,7 @@ int is_matching(T_NODE * nodeA, T_NODE * nodeB) {
 
 int is_procedure_body(T_NODE * up) {
     
-    if ((up->type == EXPR) && (up->prev != NULL) && is_type(up->prev->type)
+    if ((up->type == EXPR) && (up->prev != NULL) && ( is_type(up->prev->type) || ((up->prev->prev != NULL) && is_type(up->prev->prev->type)))
         && (up->desc != NULL) && (up->desc->type == PAR_O)) {
         return 1;
     }
