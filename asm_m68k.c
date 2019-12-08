@@ -65,6 +65,9 @@ U8 qbit_and(U8 qb1, U8 qb2) {
 #define M68K_ADD qbit(1, 1, 0, 1)
 #define M68K_SUB qbit(1, 0, 0, 1)
 
+
+#define COND_T qbit(0, 0, 0, 0)
+#define COND_F qbit(0, 0, 0, 1)
 #define COND_GEQ qbit(1, 1, 0, 0)
 #define COND_EQ qbit(0, 1, 1, 1)
 #define COND_LEQ qbit(1, 1, 1, 1)
@@ -79,6 +82,9 @@ U8 qbit_and(U8 qb1, U8 qb2) {
 #define COND_MI qbit(1, 0, 1, 1)
 #define COND_LT qbit(1, 1, 0, 1)
 #define COND_GT qbit(1, 1, 1, 0)
+
+#define D_RIGHT 0
+#define D_LEFT 1
 
 #define MAX_LABEL 10
 #define MAX_LABEL_LENGTH 20
@@ -660,11 +666,57 @@ U16 build_bhi(U8 size, U8 mxn) {
     return build_bcc_cond(size, mxn, COND_HI); 
 }
 
+U16 build_bra(U8 size, U8 mxn) {
+    return build_bcc_cond(size, mxn, COND_T); 
+}
+
+U16 build_bsr(U8 size, U8 mxn) {
+    return build_bcc_cond(size, mxn, COND_F); 
+}
 
 U16 build_tst(U8 size, U8 mxn) {
     return qbit(0, 1, 0, 0) << 12 | qbit(1, 0, 1, 0) << 8 | ops2(size) << 6 | mxn;
 }
 
+U16 build_lsd(U8 size, U8 direction, U8 mxn) {
+    return qbit(1, 1, 1, 0) << 12 | qbit(0, 0, 0,10) << 9 | qbit(0, 0, 1, 1) << 6 | direction << 8;
+}
+
+U16 build_lsr(U8 size, U8 mxn) {
+    return build_lsd(size, D_RIGHT, mxn);
+}
+
+U16 build_lsl(U8 size, U8 mxn) {
+    return build_lsd(size, D_LEFT, mxn);
+}
+
+U16 build_asd(U8 size, U8 direction, U8 mxn) {
+    return qbit(1, 1, 1, 0) << 12 | qbit(0, 0, 0, 0) << 9 | qbit(0, 0, 1, 1) << 6 | direction << 8;
+}
+
+U16 build_asr(U8 size, U8 mxn) {
+    return build_asd(size, D_RIGHT, mxn);
+}
+
+U16 build_asl(U8 size, U8 mxn) {
+    return build_asd(size, D_LEFT, mxn);
+}
+
+U16 build_negx(U8 size, U8 mxn) {
+    return qbit(0, 1, 0, 0) << 12 | qbit(0, 0, 0, 0) << 8 | ops2(size) << 6 | mxn;
+}
+
+U16 build_not(U8 size, U8 mxn) {
+    return qbit(0, 1, 0, 0) << 12 | qbit(0, 1, 1, 0) << 8 | ops2(size) << 6 | mxn;
+}
+
+U16 build_clr(U8 size, U8 mxn) {
+    return qbit(0, 1, 0, 0) << 12 | qbit(0, 0, 1, 0) << 8 | ops2(size) << 6 | mxn;
+}
+
+U16 build_neg(U8 size, U8 mxn) {
+    return qbit(0, 1, 0, 0) << 12 | qbit(0, 1, 0, 0) << 8 | ops2(size) << 6 | mxn;
+}
 
 int retrieve_label(T_ASM_CTXT * ctxt, char * input) {
     for (int i = 0;ctxt != NULL && i < ctxt->label_count;i++) {
@@ -878,9 +930,42 @@ int asm_line(T_ASM_CTXT * ctxt, T_BUFFER * buffer, char * line) {
     } else if (strncmp(cline, "bhi", 3) == 0) {
         cline += 3;
         parse_branch_op(ctxt, buffer, cline, build_bhi);
+    } else if (strncmp(cline, "bra", 3) == 0) {
+        cline += 3;
+        parse_branch_op(ctxt, buffer, cline, build_bra);
+    } else if (strncmp(cline, "bsr", 3) == 0) {
+        cline += 3;
+        parse_branch_op(ctxt, buffer, cline, build_bsr);
     } else if (strncmp(cline, "tst", 3) == 0) {
         cline += 3;
         parse_single_op(buffer, cline, build_tst);
+    } else if (strncmp(cline, "lsl", 3) == 0) {
+        cline += 3;
+        parse_single_op(buffer, cline, build_lsl);
+    } else if (strncmp(cline, "lsr", 3) == 0) {
+        cline += 3;
+        parse_single_op(buffer, cline, build_lsr);
+    } else if (strncmp(cline, "asr", 3) == 0) {
+        cline += 3;
+        parse_single_op(buffer, cline, build_asr);
+    } else if (strncmp(cline, "asl", 3) == 0) {
+        cline += 3;
+        parse_single_op(buffer, cline, build_asl);
+    } else if (strncmp(cline, "negx", 4) == 0) {
+        cline += 4;
+        parse_single_op(buffer, cline, build_negx);
+    } else if (strncmp(cline, "neg", 3) == 0) {
+        cline += 3;
+        parse_single_op(buffer, cline, build_neg);
+    } else if (strncmp(cline, "not", 3) == 0) {
+        cline += 3;
+        parse_single_op(buffer, cline, build_not);
+    } else if (strncmp(cline, "clr", 3) == 0) {
+        cline += 3;
+        parse_single_op(buffer, cline, build_clr);
+    } else if (strncmp(cline, "rts", 3) == 0) {
+        cline += 3;
+        rts(buffer);
     } else error("Invalid inline ASM.");
     
     return 0;

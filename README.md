@@ -31,13 +31,13 @@ For Motorola 68000 architecture
 ### Run unit test suite
 
 Requires the test library cmocka
-
 ```bash
   ./run-mocka.sh
 ```
 
 ### Run compilation test suite
 
+These tests are samples programs compiled for x86 which output are compared to the expected result. 
 ```bash
   ./run-tests.sh
 ```
@@ -47,6 +47,8 @@ Requires the test library cmocka
 * No Operator priority : expression are evaluated from left to right
 * No Data structure and enum
 * No pre-processor
+* No floating point support
+* No standard library support
 * "return" have to be explicit even for procedures returning void
 
 ## Amiga code generation
@@ -73,7 +75,7 @@ void * open_library(char * lib_name) {
 
 void close_library(void * lib_ptr) {
     asm {
-        move.l (4).w, a6
+        move.l ($4).w, a6
         move.l lib_ptr, a1
         jsr -414(a6)        
     }
@@ -101,6 +103,14 @@ Motorola 68000 support an addressing mode called "PC + displacement", which allo
 This limit can be override by declaring a relocation segment in the executable file, the relocation process is a mean to tell the program loader to add the absolute adress of the program to the offset set at designated places in the executable after having loaded it in memory. 
 
 A little explanation of the sample code: to be able to output text in a shell in AmigaOS, we have to call PutStr() from the "dos.library". First we need to open the library by using the "open_library" system call.
+
+### Motorola 68000 architecture
+
+TODO
+
+### Assembly syntax
+
+TODO
 
 ## ELF 32bit executable format
 

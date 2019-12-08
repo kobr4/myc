@@ -404,6 +404,25 @@ static void parse_bhi_test(void **state) {
     free(buffer);
 }
 
+static void parse_bra_test(void **state) {
+    T_BUFFER * buffer = create_buffer();
+    U8 tab[] = { 0x60, 0x00, 0x4E, 0x1A };
+    asm_line(NULL, buffer, "bra.w #$4E1A");
+    assert_memory_equal(buffer->buffer, tab, sizeof(tab));
+    assert_int_equal(buffer->length, sizeof(tab));
+    free(buffer);
+}
+
+
+static void parse_bsr_test(void **state) {
+    T_BUFFER * buffer = create_buffer();
+    U8 tab[] = { 0x61, 0x00, 0x4E, 0x1A };
+    asm_line(NULL, buffer, "bsr.w #$4E1A");
+    assert_memory_equal(buffer->buffer, tab, sizeof(tab));
+    assert_int_equal(buffer->length, sizeof(tab));
+    free(buffer);
+}
+
 static void parse_movea_test(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x38, 0x7C, 0x60, 0x00 };
@@ -466,6 +485,78 @@ static void parse_move_from_local_symbol_test(void **state) {
     free(buffer);
 }
 
+static void parse_lsl_test(void **state) {
+    T_BUFFER * buffer = create_buffer();
+    U8 tab[] = { 0xF5, 0xC0 };
+    asm_line(NULL, buffer, "lsl.w d1");
+    assert_memory_equal(buffer->buffer, tab, sizeof(tab));
+    assert_int_equal(buffer->length, sizeof(tab));
+    free(buffer);
+}
+
+static void parse_lsr_test(void **state) {
+    T_BUFFER * buffer = create_buffer();
+    U8 tab[] = { 0xF4, 0xC0 };
+    asm_line(NULL, buffer, "lsr.w d1");
+    assert_memory_equal(buffer->buffer, tab, sizeof(tab));
+    assert_int_equal(buffer->length, sizeof(tab));
+    free(buffer);
+}
+
+static void parse_asl_test(void **state) {
+    T_BUFFER * buffer = create_buffer();
+    U8 tab[] = { 0xE1, 0xC0 };
+    asm_line(NULL, buffer, "asl.w d1");
+    assert_memory_equal(buffer->buffer, tab, sizeof(tab));
+    assert_int_equal(buffer->length, sizeof(tab));
+    free(buffer);
+}
+
+static void parse_asr_test(void **state) {
+    T_BUFFER * buffer = create_buffer();
+    U8 tab[] = { 0xE0, 0xC0 };
+    asm_line(NULL, buffer, "asr.w d1");
+    assert_memory_equal(buffer->buffer, tab, sizeof(tab));
+    assert_int_equal(buffer->length, sizeof(tab));
+    free(buffer);
+}
+
+static void parse_neg_test(void **state) {
+    T_BUFFER * buffer = create_buffer();
+    U8 tab[] = { 0x44, 0x78, 0xFE, 0x26 };
+    asm_line(NULL, buffer, "neg.w ($FFFFFE26).w");
+    assert_memory_equal(buffer->buffer, tab, sizeof(tab));
+    assert_int_equal(buffer->length, sizeof(tab));
+    free(buffer);
+}
+
+static void parse_not_test(void **state) {
+    T_BUFFER * buffer = create_buffer();
+    U8 tab[] = { 0x46, 0x78, 0xFE, 0x26 };
+    asm_line(NULL, buffer, "not.w ($FFFFFE26).w");
+    assert_memory_equal(buffer->buffer, tab, sizeof(tab));
+    assert_int_equal(buffer->length, sizeof(tab));
+    free(buffer);
+}
+
+static void parse_clr_test(void **state) {
+    T_BUFFER * buffer = create_buffer();
+    U8 tab[] = { 0x42, 0x78, 0x85, 0x00 };
+    asm_line(NULL, buffer, "clr.w ($FFFF8500).w");
+    assert_memory_equal(buffer->buffer, tab, sizeof(tab));
+    assert_int_equal(buffer->length, sizeof(tab));
+    free(buffer);
+}
+
+static void parse_rts_test(void **state) {
+    T_BUFFER * buffer = create_buffer();
+    U8 tab[] = { 0x4E, 0x75 };
+    asm_line(NULL, buffer, "rts");
+    assert_memory_equal(buffer->buffer, tab, sizeof(tab));
+    assert_int_equal(buffer->length, sizeof(tab));
+    free(buffer);
+}
+
 
 int main(void) {
     const struct CMUnitTest tests[] = {
@@ -512,10 +603,20 @@ int main(void) {
         cmocka_unit_test(parse_bvc_test),
         cmocka_unit_test(parse_bvs_test),
         cmocka_unit_test(parse_bhi_test),
+        cmocka_unit_test(parse_bra_test),
+        cmocka_unit_test(parse_bsr_test),
         cmocka_unit_test(parse_movea_test),
         cmocka_unit_test(parse_beq_label_test),
         cmocka_unit_test(parse_move_to_local_symbol_test),
-        cmocka_unit_test(parse_move_from_local_symbol_test),                  
+        cmocka_unit_test(parse_move_from_local_symbol_test),
+        cmocka_unit_test(parse_lsl_test),
+        cmocka_unit_test(parse_lsr_test),
+        cmocka_unit_test(parse_asl_test),
+        cmocka_unit_test(parse_asr_test),
+        cmocka_unit_test(parse_neg_test),
+        cmocka_unit_test(parse_not_test), 
+        cmocka_unit_test(parse_clr_test),
+        cmocka_unit_test(parse_rts_test),                   
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }
