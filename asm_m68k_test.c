@@ -121,7 +121,7 @@ static void parse_move_test2(void **state) {
 
 static void parse_move_test3(void **state) {
     T_BUFFER * buffer = create_buffer();
-    U8 tab[] = { 0x21, 0xFC, 0x05, 0xF5, 0xE1, 0x00, 0xFF, 0xE0 };
+    U8 tab[] = { 0x23, 0xFC, 0x05, 0xF5, 0xE1, 0x00, 0xFF, 0xFF, 0xFF, 0xE0 };
     asm_line(NULL, buffer, "move.l #$05F5E100, ($FFFFFFE0).l");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     assert_int_equal(buffer->length, sizeof(tab));
@@ -441,6 +441,16 @@ static void parse_beq_label_test(void **state) {
     free(buffer);
 }
 
+static void parse_beq_backpatch_label_test(void **state) {
+    T_BUFFER * buffer = create_buffer();
+    U8 tab[] = { 0x67, 0x00, 0x00, 0x02 };
+    asm_block(buffer, "beq.w toto\ntoto :\n");
+    assert_memory_equal(buffer->buffer, tab, sizeof(tab));
+    assert_int_equal(buffer->length, sizeof(tab));
+    free(buffer);
+}
+
+
 static void parse_move_to_local_symbol_test(void **state) {
     T_ELT elt_int;
     T_NODE anonymous_int;
@@ -557,6 +567,15 @@ static void parse_rts_test(void **state) {
     free(buffer);
 }
 
+static void parse_btst_test(void **state) {
+    T_BUFFER * buffer = create_buffer();
+    U8 tab[] = { 0x08, 0x39, 0x00, 0x06, 0x00, 0xBF, 0xe0, 0x01 };
+    asm_line(NULL, buffer, "btst.b #6,($BFE001).l");
+    assert_memory_equal(buffer->buffer, tab, sizeof(tab));
+    assert_int_equal(buffer->length, sizeof(tab));
+    free(buffer);    
+}
+
 
 int main(void) {
     const struct CMUnitTest tests[] = {
@@ -616,7 +635,9 @@ int main(void) {
         cmocka_unit_test(parse_neg_test),
         cmocka_unit_test(parse_not_test), 
         cmocka_unit_test(parse_clr_test),
-        cmocka_unit_test(parse_rts_test),                   
+        cmocka_unit_test(parse_rts_test),
+        cmocka_unit_test(parse_btst_test),  
+        cmocka_unit_test(parse_beq_backpatch_label_test),              
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

@@ -85,9 +85,7 @@ void write_hunk(char * filename, T_BUFFER * buffer) {
 
     T_HUNK_CODE code;
     code.magic = l_endian(0x3E9);
-    
-    code.n = buffer->length / 4;
- //   U32 code_n = l_endian(code.n);
+    code.n = buffer->length / 4 + 1;
     code.code = (U32*)malloc(code.n * sizeof(U32));
     
     U8 * codeAsU8 = (U8*)code.code;
@@ -118,17 +116,16 @@ void write_hunk(char * filename, T_BUFFER * buffer) {
 
     fwrite(&code.magic, sizeof(code.magic), 1, f);
 
-//    fwrite(&code_n, sizeof(code.n), 1, f);
-    
     int code_length = l_endian(code.n + setup_buffer->length / 4 + 1);
-    printf("Code length %d vs %ld\n", code.n + setup_buffer->length / 4 + 1, setup_buffer->length + code.n * sizeof(U32));
+    printf("CODE LENGTH %d bytes\n", (code.n + setup_buffer->length / 4 + 1) * 4);
     fwrite(&code_length, 4, 1, f);
     fwrite(setup_buffer->buffer, setup_buffer->length, 1, f);
-
+    printf("[SETUP]Writing: %d bytes\n", setup_buffer->length);
     fwrite(code.code, buffer->length, 1, f);
+    printf("[MAIN]Writing: %d bytes\n", buffer->length);
     U8 pad = 0;
     for (int i = setup_buffer->length + buffer->length;i < (code.n + setup_buffer->length / 4 + 1) * 4; i++) {
-            printf("PAD %d\n",i);
+            printf("[PAD]Writing: 1 byte\n");
             fwrite(&pad, sizeof(U8), 1, f);      
     }
 

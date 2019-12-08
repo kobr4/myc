@@ -88,11 +88,17 @@ U8 qbit_and(U8 qb1, U8 qb2) {
 
 #define MAX_LABEL 10
 #define MAX_LABEL_LENGTH 20
+#define MAX_BACKPATCH 10
 
 typedef struct T_ASM_CTXT {
     char labels[MAX_LABEL][MAX_LABEL_LENGTH];
     U32 label_offset[MAX_LABEL];
     int label_count;
+    
+    char labels_back[10][MAX_LABEL_LENGTH];
+    U8 * backpatchs[10];
+    int backpatch_count;
+    U32 backpatch_offset[10];
 } T_ASM_CTXT;
 
 
@@ -428,7 +434,6 @@ int retrieve_local_symbol(T_BUFFER * buffer, char * input) {
 
 
 U8 parse_operand(T_BUFFER * buffer, char * input, U8 mn, U8 size) {
-    //printf("OPERAND: %s\n", input);
     int offset = 0;
     int res = 0;
     int reg = 0;
@@ -467,18 +472,17 @@ U8 parse_operand(T_BUFFER * buffer, char * input, U8 mn, U8 size) {
         return mn ? M_IMMEDIATE << 3 | XN_IMMEDIATE : XN_IMMEDIATE << 3 | M_IMMEDIATE;
     }
 
-    res = sscanf(input, "($%x).w", &offset);
-    if (res != 1) res = sscanf(input, "(%d).w", &offset);
-    if (res == 1) {
-        write_u16(buffer, offset);
-        return mn ? M_ABS_LS << 3 | XN_ABSOLUTE_S : XN_ABSOLUTE_S << 3 | M_ABS_LS;
-    }
-
-    res = sscanf(input, "($%x).l", &offset);
-    if (res != 1) res = sscanf(input, "(%d).l", &offset);
-    if (res == 1) {
-        write_u32(buffer, offset);
-        return mn ? M_ABS_LS << 3 | XN_ABSOLUTE_L : XN_ABSOLUTE_L << 3 | M_ABS_LS;
+    char c;
+    res = sscanf(input, "($%x).%c", &offset, &c);
+    if (res != 2) res = sscanf(input, "(%d).%c", &offset, &c);
+    if (res == 2) {
+        if (c == 'w') {
+            write_u16(buffer, offset);
+            return mn ? M_ABS_LS << 3 | XN_ABSOLUTE_S : XN_ABSOLUTE_S << 3 | M_ABS_LS;
+        } else if (c == 'l') {
+            write_u32(buffer, offset);
+            return mn ? M_ABS_LS << 3 | XN_ABSOLUTE_L : XN_ABSOLUTE_L << 3 | M_ABS_LS;
+        } else ASM_ERROR;
     }
 
     res = sscanf(input, "a%d", &reg);
@@ -487,7 +491,7 @@ U8 parse_operand(T_BUFFER * buffer, char * input, U8 mn, U8 size) {
 
     res = sscanf(input, "d%d", &reg);
     if (res == 1)
-        return mn ? M_DATA_REGISTER << 3 | reg : reg << 3 | M_DATA_REGISTER;
+        return mn ? M_DATA_REGISTER << 3 | reg : reg << 3 | M_DATA_REGISTER;  
     
     ASM_ERROR;
 }
@@ -674,6 +678,11 @@ U16 build_bsr(U8 size, U8 mxn) {
     return build_bcc_cond(size, mxn, COND_F); 
 }
 
+U16 build_btst(U8 size, U8 mxn, U8 mxn2) {
+    mxn = mxn & qbit(0, 1, 1, 1);
+    return qbit(0, 0, 0, 0) << 12 | mxn << 9 | (mxn == XN_IMMEDIATE ? 0 : 1) << 8 | 0 << 6 | mxn2 >> 3 | ((mxn2 & qbit(0, 1, 1, 1)) << 3);
+}
+
 U16 build_tst(U8 size, U8 mxn) {
     return qbit(0, 1, 0, 0) << 12 | qbit(1, 0, 1, 0) << 8 | ops2(size) << 6 | mxn;
 }
@@ -754,6 +763,14 @@ void parse_branch_op(T_ASM_CTXT * ctxt, T_BUFFER * buffer, char * line, U16(*bui
     if ((i = retrieve_label(ctxt, op)) != -1) {
         mxn = M_DISP_PC << 3 | XN_DISP_PC;
         write_u16(buffer, ctxt->label_offset[i] - buffer->length );
+    } else if ( (op[0] >= 'a' && op[0] <= 'z') || (op[0] >= 'A' && op[0] <= 'Z') )  {
+        mxn = M_DISP_PC << 3 | XN_DISP_PC;
+        ctxt->backpatchs[ctxt->backpatch_count] = &buffer->buffer[buffer->length];
+        strcpy(ctxt->labels_back[ctxt->backpatch_count], op); 
+        ctxt->backpatch_offset[ctxt->backpatch_count] = buffer->length;
+        ctxt->backpatch_count++;
+        
+        buffer->length += 2;
     } else {
         mxn = parse_operand(buffer, op, 1, size);
     }
@@ -936,6 +953,9 @@ int asm_line(T_ASM_CTXT * ctxt, T_BUFFER * buffer, char * line) {
     } else if (strncmp(cline, "bsr", 3) == 0) {
         cline += 3;
         parse_branch_op(ctxt, buffer, cline, build_bsr);
+    } else if (strncmp(cline, "btst", 4) == 0) {
+        cline += 4;
+        parse_dual_op(buffer, cline, build_btst);
     } else if (strncmp(cline, "tst", 3) == 0) {
         cline += 3;
         parse_single_op(buffer, cline, build_tst);
@@ -980,12 +1000,19 @@ char * skip_to_endline(char * input) {
 int asm_block(T_BUFFER * buffer, char * block) {
     T_ASM_CTXT ctxt;
     ctxt.label_count = 0;
+    ctxt.backpatch_count = 0;
     block = trim(block);
     while(*block != 0) {
         trim(block);
         asm_line(&ctxt, buffer, block);
         block = skip_to_endline(block);
         block = trim(block);
+    }
+
+    for (int i = 0;i < ctxt.backpatch_count;i++) {
+        int index = retrieve_label(&ctxt, ctxt.labels_back[i]);
+        if (index == -1) ASM_ERROR;
+        write_u16_ptr(ctxt.backpatchs[i], ctxt.label_offset[index] - ctxt.backpatch_offset[i]);
     }
 }
 
@@ -1045,14 +1072,12 @@ void asm_sub_variable_and_store(T_NODE * n, int offset, T_BUFFER * buffer) {
 }
 
 void asm_retrieve_variable_indirect_vs(int size, T_BUFFER * buffer) {
-    //printf("[ASM] asm_retrieve_variable_indirect_vs\n");
     printf("[ASM][%x] move.%c (a%d), d%d\n", buffer->length, size2char(size), D0, A0);
     U16 instr = qbit(0, 0, 0, 0) << 14 | ops(size) << 12 | D0 << 9 | M_DATA_REGISTER << 6 | M_ADDRESS << 3 | A0;
     write_u16(buffer, instr);
 }
 
 void asm_retrieve_variable_indirect_vs_an(int size, T_BUFFER * buffer, enum AN an) {
-    //printf("[ASM] asm_retrieve_variable_indirect_vs\n");
     printf("[ASM][%x] move.%c (a%d), d%d\n", buffer->length, size2char(size), an, D0);
     U16 instr = qbit(0, 0, 0, 0) << 14 | ops(size) << 12 | D0 << 9 | M_DATA_REGISTER << 6 | M_ADDRESS << 3 | an;
     write_u16(buffer, instr);

@@ -4,8 +4,7 @@ The goal of this project is to build a minimalistic C compiler that does not req
 ## Features
 * Targetting x86 32bit instruction set on the Linux platform
 * Targetting m68k instruction set on Amiga OS
-* Highly incomplete currently
-* Should be retargetable in the future
+* Procedures, pointers, arrays, global variables, local variables, char, short, long (32bit)  
 
 ## Usage
 
@@ -44,8 +43,8 @@ These tests are samples programs compiled for x86 which output are compared to t
 
 ## Missing features
 
-* No Operator priority : expression are evaluated from left to right
-* No Data structure and enum
+* No operator priority : expression are evaluated from left to right
+* No data structure and enum
 * No pre-processor
 * No floating point support
 * No standard library support

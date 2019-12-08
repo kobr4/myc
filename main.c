@@ -820,6 +820,9 @@ int add_global_symbol(T_NODE * up, T_BUFFER * buffer) {
         }
     }
 
+#ifdef M68K 
+    if (buffer->length%2 == 1) buffer->length++;
+#endif    
     return up->offset;
 }
 

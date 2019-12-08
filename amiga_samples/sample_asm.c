@@ -4,7 +4,7 @@ char hello[] = "Hello World !";
 void * open_library(char * lib_name) {
     void * lib_ptr;
     asm {
-        move.l (4).w, a6
+        move.l ($4).w, a6
         move.l lib_name, a1
         move.l #0, d0
         jsr -552(a6)
