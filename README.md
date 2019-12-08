@@ -42,6 +42,66 @@ Requires the test library cmocka
   ./run-tests.sh
 ```
 
+## Missing features
+
+* No Operator priority : expression are evaluated from left to right
+* No Data structure and enum
+* No pre-processor
+* "return" have to be explicit even for procedures returning void
+
+## Amiga code generation
+
+MYCC can output Motorola 68000 code for Amiga OS. It generates an executable in the "HUNK" file format.
+In addition, the compilers support inline ASM.
+
+Here is an "Hello World" example for Amiga OS.
+```C
+char dos_name[] = "dos.library";
+char hello[] = "Hello World !";
+
+void * open_library(char * lib_name) {
+    void * lib_ptr;
+    asm {
+        move.l ($4).w, a6
+        move.l lib_name, a1
+        move.l #0, d0
+        jsr -552(a6)
+        move.l d0, lib_ptr      
+    }
+    return lib_ptr;
+}
+
+void close_library(void * lib_ptr) {
+    asm {
+        move.l (4).w, a6
+        move.l lib_ptr, a1
+        jsr -414(a6)        
+    }
+    return;
+}
+
+void dos_put_str(char * msg, void * dos_lib_ptr) {
+    asm {
+        move.l dos_lib_ptr, a6
+        move.l msg, d1
+        jsr -948(a6)        
+    }
+    return;
+}
+
+int main(int argc, char **argv) {
+    void * dos_lib_ptr = open_library(dos_name);
+    dos_put_str(hello, dos_lib_ptr);
+    close_library(dos_lib_ptr);
+    return 0;
+}
+```
+Code generation is particular because without MMU, the code to run can be placed anywhere in memory by the operating system. The good practice is to make code location independent by using position relative memory location.
+Motorola 68000 support an addressing mode called "PC + displacement", which allow to address memory location relative to the program counter with a caveat though, that the displacement is a signed 16 bit value, which means that it can only target addresses in the range -32kb, + 32kb. 
+This limit can be override by declaring a relocation segment in the executable file, the relocation process is a mean to tell the program loader to add the absolute adress of the program to the offset set at designated places in the executable after having loaded it in memory. 
+
+A little explanation of the sample code: to be able to output text in a shell in AmigaOS, we have to call PutStr() from the "dos.library". First we need to open the library by using the "open_library" system call.
+
 ## ELF 32bit executable format
 
 The executable format genereted by the compiler is "ELF 32bit" which is the standard executable format for 

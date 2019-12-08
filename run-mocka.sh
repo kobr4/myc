@@ -1,9 +1,9 @@
 #!/bin/bash
 
-gcc cmocka_test.c -o mockatests -lcmocka
+gcc asm_m68k_test.c -o asm_m68k_test -lcmocka
 COMPIL=$?
 
 if [ $COMPIL = "0" ] 
 then
-./mockatests
+./asm_m68k_test
 fi

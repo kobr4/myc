@@ -15,7 +15,7 @@ void * open_library(char * lib_name) {
 
 void close_library(void * lib_ptr) {
     asm {
-        move.l (4).w, a6
+        move.l ($4).w, a6
         move.l lib_ptr, a1
         jsr -414(a6)        
     }

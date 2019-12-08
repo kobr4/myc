@@ -60,4 +60,4 @@ out
 *.s
 fibo
 emu.sh
-mockatests
+asm_m68k_test

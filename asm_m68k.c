@@ -436,6 +436,7 @@ U8 parse_operand(T_BUFFER * buffer, char * input, U8 mn, U8 size) {
     }
 
     res = sscanf(input, "%d(a%d)", &offset, &reg);
+    if (res != 2) res = sscanf(input, "$%x(a%d)", &offset, &reg);
     if (res == 2) {
         write_u16(buffer, offset);
         return mn ? M_ADDRESS_DISP << 3 | reg : reg << 3 | M_ADDRESS_DISP;
@@ -449,7 +450,8 @@ U8 parse_operand(T_BUFFER * buffer, char * input, U8 mn, U8 size) {
     if (res == 1)
         return mn ? M_ADDRESS_POST_INC << 3 | reg : reg << 3 | M_ADDRESS_POST_INC;
 
-    res = sscanf(input, "#%x", &offset);
+    res = sscanf(input, "#$%x", &offset);
+    if (res != 1) res = sscanf(input, "#%d", &offset);
     if (res == 1){
         switch(size) {
             case 1 : write_u16(buffer, offset); break;
@@ -459,13 +461,15 @@ U8 parse_operand(T_BUFFER * buffer, char * input, U8 mn, U8 size) {
         return mn ? M_IMMEDIATE << 3 | XN_IMMEDIATE : XN_IMMEDIATE << 3 | M_IMMEDIATE;
     }
 
-    res = sscanf(input, "(%x).w", &offset);
+    res = sscanf(input, "($%x).w", &offset);
+    if (res != 1) res = sscanf(input, "(%d).w", &offset);
     if (res == 1) {
         write_u16(buffer, offset);
         return mn ? M_ABS_LS << 3 | XN_ABSOLUTE_S : XN_ABSOLUTE_S << 3 | M_ABS_LS;
     }
 
-    res = sscanf(input, "(%x).l", &offset);
+    res = sscanf(input, "($%x).l", &offset);
+    if (res != 1) res = sscanf(input, "(%d).l", &offset);
     if (res == 1) {
         write_u32(buffer, offset);
         return mn ? M_ABS_LS << 3 | XN_ABSOLUTE_L : XN_ABSOLUTE_L << 3 | M_ABS_LS;

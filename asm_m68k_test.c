@@ -104,7 +104,7 @@ static void parse_jsr_test(void **state) {
 static void parse_move_test(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x11, 0xFC, 0x00, 0x64, 0xFF, 0xE0 };
-    asm_line(NULL, buffer, "move.b #64, (FFFFFFE0).w");
+    asm_line(NULL, buffer, "move.b #$64, ($FFFFFFE0).w");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     assert_int_equal(buffer->length, sizeof(tab));
     free(buffer);    
@@ -113,7 +113,7 @@ static void parse_move_test(void **state) {
 static void parse_move_test2(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x31, 0xFC, 0x03, 0xE8, 0xFF, 0xE0 };
-    asm_line(NULL, buffer, "move.w #03E8, (FFFFFFE0).w");
+    asm_line(NULL, buffer, "move.w #$03E8, ($FFFFFFE0).w");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     assert_int_equal(buffer->length, sizeof(tab));
     free(buffer);    
@@ -122,7 +122,7 @@ static void parse_move_test2(void **state) {
 static void parse_move_test3(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x21, 0xFC, 0x05, 0xF5, 0xE1, 0x00, 0xFF, 0xE0 };
-    asm_line(NULL, buffer, "move.l #05F5E100, (FFFFFFE0).l");
+    asm_line(NULL, buffer, "move.l #$05F5E100, ($FFFFFFE0).l");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     assert_int_equal(buffer->length, sizeof(tab));
     free(buffer);    
@@ -131,7 +131,7 @@ static void parse_move_test3(void **state) {
 static void parse_move_test4(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x12, 0x3C, 0x00, 0x20 };
-    asm_line(NULL, buffer, "move.b #20, d1");
+    asm_line(NULL, buffer, "move.b #$20, d1");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     assert_int_equal(buffer->length, sizeof(tab));
     free(buffer);    
@@ -140,7 +140,7 @@ static void parse_move_test4(void **state) {
 static void parse_move_test5(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x31, 0xF8, 0x01, 0xA5, 0xFF, 0xE0 };
-    asm_line(NULL, buffer, "move.w (FFFF01A5).w, (FFFFFFE0).w");
+    asm_line(NULL, buffer, "move.w ($FFFF01A5).w, ($FFFFFFE0).w");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     assert_int_equal(buffer->length, sizeof(tab));
     free(buffer);    
@@ -149,7 +149,7 @@ static void parse_move_test5(void **state) {
 static void parse_move_test6(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x21, 0xC1, 0xFF, 0xE0 };
-    asm_line(NULL, buffer, "move.l d1, (FFFFFFE0).w");
+    asm_line(NULL, buffer, "move.l d1, ($FFFFFFE0).w");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     assert_int_equal(buffer->length, sizeof(tab));
     free(buffer);
@@ -158,7 +158,7 @@ static void parse_move_test6(void **state) {
 static void parse_move_test7(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x38, 0x7C, 0x60, 0x00 };
-    asm_line(NULL, buffer, "move.w #6000, a4");
+    asm_line(NULL, buffer, "move.w #$6000, a4");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     assert_int_equal(buffer->length, sizeof(tab));
     free(buffer);
@@ -186,7 +186,7 @@ static void parse_adda_test2(void **state) {
 static void parse_adda_test3(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0xD2, 0XF8, 0xF1, 0x00 };
-    asm_line(NULL, buffer, "adda.w (FFFFF100).w, a1");
+    asm_line(NULL, buffer, "adda.w ($FFFFF100).w, a1");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     assert_int_equal(buffer->length, sizeof(tab));
     free(buffer);
@@ -195,7 +195,7 @@ static void parse_adda_test3(void **state) {
 static void parse_lea_test(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x41, 0xF8, 0xFF, 0xF4 };
-    asm_line(NULL, buffer, "lea.l (FFFFFFF4).w, a0");
+    asm_line(NULL, buffer, "lea.l ($FFFFFFF4).w, a0");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     assert_int_equal(buffer->length, sizeof(tab));
     free(buffer);
@@ -204,7 +204,7 @@ static void parse_lea_test(void **state) {
 static void parse_divu_test(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x82, 0xF8, 0xF3, 0x14 };
-    asm_line(NULL, buffer, "divu.w (FFFFF314).w, d1");
+    asm_line(NULL, buffer, "divu.w ($FFFFF314).w, d1");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     assert_int_equal(buffer->length, sizeof(tab));
     free(buffer);
@@ -213,7 +213,7 @@ static void parse_divu_test(void **state) {
 static void parse_divs_test(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x81, 0xFC ,0x00, 0x0A };
-    asm_line(NULL, buffer, "divs.w #A, d0");
+    asm_line(NULL, buffer, "divs.w #$A, d0");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     assert_int_equal(buffer->length, sizeof(tab));
     free(buffer);
@@ -222,7 +222,7 @@ static void parse_divs_test(void **state) {
 static void parse_mulu_test(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0xC4, 0xFC, 0x00, 0x19 };
-    asm_line(NULL, buffer, "mulu.w #19, d2");
+    asm_line(NULL, buffer, "mulu.w #$19, d2");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     assert_int_equal(buffer->length, sizeof(tab));
     free(buffer);
@@ -231,7 +231,7 @@ static void parse_mulu_test(void **state) {
 static void parse_muls_test(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0xC3, 0xFC, 0x00, 0X19 };
-    asm_line(NULL, buffer, "muls.w #19, d1");
+    asm_line(NULL, buffer, "muls.w #$19, d1");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     assert_int_equal(buffer->length, sizeof(tab));
     free(buffer);
@@ -240,7 +240,7 @@ static void parse_muls_test(void **state) {
 static void parse_cmpi_test(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x0C, 0X38, 0x00, 0x26, 0xFF, 0xE4 };
-    asm_line(NULL, buffer, "cmpi.b #26, (FFFFFFE4).w");
+    asm_line(NULL, buffer, "cmpi.b #$26, ($FFFFFFE4).w");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     free(buffer);
 }
@@ -248,7 +248,7 @@ static void parse_cmpi_test(void **state) {
 static void parse_cmpi_test2(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x0C, 0x78, 0x41, 0x70, 0xFF, 0xB0 };
-    asm_line(NULL, buffer, "cmpi.w #4170, (FFFFFFB0).w");
+    asm_line(NULL, buffer, "cmpi.w #$4170, ($FFFFFFB0).w");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     free(buffer);
 }
@@ -256,7 +256,7 @@ static void parse_cmpi_test2(void **state) {
 static void parse_cmpi_test3(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x0C, 0x82, 0x00, 0x00, 0x00, 0x00 };
-    asm_line(NULL, buffer, "cmpi.l #0, d2");
+    asm_line(NULL, buffer, "cmpi.l #$0, d2");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     free(buffer);
 }
@@ -264,7 +264,7 @@ static void parse_cmpi_test3(void **state) {
 static void parse_andi_test(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x02, 0x01, 0x00, 0x36 };
-    asm_line(NULL, buffer, "andi.b #36, d1");
+    asm_line(NULL, buffer, "andi.b #$36, d1");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     free(buffer);
 }
@@ -272,7 +272,7 @@ static void parse_andi_test(void **state) {
 static void parse_addi_test(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x06, 0x01, 0x00, 0x20 };
-    asm_line(NULL, buffer, "addi.b #20, d1");
+    asm_line(NULL, buffer, "addi.b #$20, d1");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     assert_int_equal(buffer->length, sizeof(tab));
     free(buffer);
@@ -281,7 +281,7 @@ static void parse_addi_test(void **state) {
 static void parse_subi_test(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x04, 0x01, 0x00, 0x20 };
-    asm_line(NULL, buffer, "subi.b #20, d1");
+    asm_line(NULL, buffer, "subi.b #$20, d1");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     assert_int_equal(buffer->length, sizeof(tab));
     free(buffer);
@@ -290,7 +290,7 @@ static void parse_subi_test(void **state) {
 static void parse_ori_test(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x00, 0x01, 0x00, 0x36 };
-    asm_line(NULL, buffer, "ori.b #36, d1");
+    asm_line(NULL, buffer, "ori.b #$36, d1");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     assert_int_equal(buffer->length, sizeof(tab));
     free(buffer);
@@ -299,7 +299,7 @@ static void parse_ori_test(void **state) {
 static void parse_ori_test2(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x00, 0x78, 0x20, 0x05, 0xF1, 0x00 };
-    asm_line(NULL, buffer, "ori.w #2005, (FFFFF100).w");
+    asm_line(NULL, buffer, "ori.w #$2005, ($FFFFF100).w");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     assert_int_equal(buffer->length, sizeof(tab));
     free(buffer);
@@ -308,7 +308,7 @@ static void parse_ori_test2(void **state) {
 static void parse_eori_test(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x0A, 0x38, 0x00, 0x80, 0xF0, 0x0E };
-    asm_line(NULL, buffer, "eori.b #80, (FFFFF00E).w");
+    asm_line(NULL, buffer, "eori.b #$80, ($FFFFF00E).w");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     assert_int_equal(buffer->length, sizeof(tab));
     free(buffer);
@@ -317,7 +317,7 @@ static void parse_eori_test(void **state) {
 static void parse_eori_test2(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x0A, 0x78, 0x31, 0x19, 0xF0, 0x10 };
-    asm_line(NULL, buffer, "eori.w #3119, (FFFFF010).w");
+    asm_line(NULL, buffer, "eori.w #$3119, ($FFFFF010).w");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     assert_int_equal(buffer->length, sizeof(tab));
     free(buffer);
@@ -326,7 +326,7 @@ static void parse_eori_test2(void **state) {
 static void parse_beq_test(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x67, 0x00, 0x00, 0x10 };
-    asm_line(NULL, buffer, "beq.w #10");
+    asm_line(NULL, buffer, "beq.w #$10");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     assert_int_equal(buffer->length, sizeof(tab));
     free(buffer);
@@ -335,7 +335,7 @@ static void parse_beq_test(void **state) {
 static void parse_ble_test(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x6F, 0x00, 0x00, 0x10 };
-    asm_line(NULL, buffer, "ble.w #10");
+    asm_line(NULL, buffer, "ble.w #$10");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     assert_int_equal(buffer->length, sizeof(tab));
     free(buffer);
@@ -344,7 +344,7 @@ static void parse_ble_test(void **state) {
 static void parse_bge_test(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x6C, 0x00, 0x00, 0x10 };
-    asm_line(NULL, buffer, "bge.w #10");
+    asm_line(NULL, buffer, "bge.w #$10");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     assert_int_equal(buffer->length, sizeof(tab));
     free(buffer);
@@ -353,7 +353,7 @@ static void parse_bge_test(void **state) {
 static void parse_bne_test(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x66, 0x00, 0x00, 0x10 };
-    asm_line(NULL, buffer, "bne.w #10");
+    asm_line(NULL, buffer, "bne.w #$10");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     assert_int_equal(buffer->length, sizeof(tab));
     free(buffer);
@@ -362,7 +362,7 @@ static void parse_bne_test(void **state) {
 static void parse_bcc_test(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x64, 0x00, 0x00, 0x10 };
-    asm_line(NULL, buffer, "bcc.w #10");
+    asm_line(NULL, buffer, "bcc.w #$10");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     assert_int_equal(buffer->length, sizeof(tab));
     free(buffer);
@@ -371,7 +371,7 @@ static void parse_bcc_test(void **state) {
 static void parse_bcs_test(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x65, 0x00, 0x00, 0x10 };
-    asm_line(NULL, buffer, "bcs.w #10");
+    asm_line(NULL, buffer, "bcs.w #$10");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     assert_int_equal(buffer->length, sizeof(tab));
     free(buffer);
@@ -380,7 +380,7 @@ static void parse_bcs_test(void **state) {
 static void parse_bvc_test(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x68, 0x00, 0x00, 0x10 };
-    asm_line(NULL, buffer, "bvc.w #10");
+    asm_line(NULL, buffer, "bvc.w #$10");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     assert_int_equal(buffer->length, sizeof(tab));
     free(buffer);
@@ -389,7 +389,7 @@ static void parse_bvc_test(void **state) {
 static void parse_bvs_test(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x69, 0x00, 0x00, 0x10 };
-    asm_line(NULL, buffer, "bvs.w #10");
+    asm_line(NULL, buffer, "bvs.w #$10");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     assert_int_equal(buffer->length, sizeof(tab));
     free(buffer);
@@ -398,7 +398,7 @@ static void parse_bvs_test(void **state) {
 static void parse_bhi_test(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x62, 0x00, 0x00, 0x10 };
-    asm_line(NULL, buffer, "bhi.w #10");
+    asm_line(NULL, buffer, "bhi.w #$10");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     assert_int_equal(buffer->length, sizeof(tab));
     free(buffer);
@@ -407,7 +407,7 @@ static void parse_bhi_test(void **state) {
 static void parse_movea_test(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x38, 0x7C, 0x60, 0x00 };
-    asm_line(NULL, buffer, "movea.w #6000, a4");
+    asm_line(NULL, buffer, "movea.w #$6000, a4");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     assert_int_equal(buffer->length, sizeof(tab));
     free(buffer);
