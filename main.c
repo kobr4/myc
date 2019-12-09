@@ -543,7 +543,9 @@ int is_procedure_call(T_NODE * up) {
 }
 
 int resolve(T_NODE * node, int left, char do_next) {
-    if (node == NULL) return left;
+    if (node == NULL) {
+        return left;
+    }
 
     T_NODE * next = (do_next == 1) ? node->next : NULL; 
 
@@ -569,7 +571,6 @@ int resolve(T_NODE * node, int left, char do_next) {
         int v = atoi(value);
         
         if (left != 0) error_elt(elt, "Syntax error");
-
         return resolve(next, v, do_next);
     }
 
@@ -577,6 +578,11 @@ int resolve(T_NODE * node, int left, char do_next) {
         
         return resolve(next, node->elt->str[1], do_next);
     }
+
+    if (node->type == END) {
+        return left;
+    }
+
     return resolve(next, left, do_next);
 }
 
@@ -778,6 +784,31 @@ void unstack_local_symbol(T_BUFFER * buffer) {
     buffer->local_symbol_count--;
 }
 
+void unescape(char * out, char * in) {
+    while(*in != 0 && *in != '"') {
+        if (*in == '\\') {
+            switch (*(in+1)) {
+                case '\\' : *out = *in; break;
+                case 'a' : *out = '\a'; break;
+                case 'b' : *out = '\b'; break;
+                case 'e' : *out = '\e'; break;
+                case 't' : *out = '\t'; break;
+                case '"' : *out = '"'; break;
+                case 'v' : *out = '\v'; break;
+                case 'r' : *out = '\r'; break;
+                case 'n' : *out = '\n'; break;
+                default: break; 
+            }
+            in += 2;
+        } else {
+            *out = *in;
+            in++;
+        }
+        out ++;
+    }
+    *out = 0;
+}
+
 int add_global_symbol(T_NODE * up, T_BUFFER * buffer) {
 
     buffer->global_symbol[buffer->global_symbol_count++] = up;
@@ -788,11 +819,11 @@ int add_global_symbol(T_NODE * up, T_BUFFER * buffer) {
 
         if (up->next != NULL && up->next->type == EQ) {
             if (up->next->next->type == STR) {
-                memcpy( &(buffer->buffer[buffer->length]), up->next->next->elt->str+1, up->next->next->elt->len-2);
-                buffer->length += up->next->next->elt->len-2;
+                char s[256];
+                unescape(s, up->next->next->elt->str+1);
+                memcpy( &(buffer->buffer[buffer->length]), s, strlen(s));
+                buffer->length += strlen(s);
                 buffer->buffer[buffer->length++] = 0;
-
-                printf("Copied: %d\n", up->next->next->elt->len-2);
             } else {
                 error_elt(up->elt,"Unsupported declaration");
             }
@@ -816,7 +847,13 @@ int add_global_symbol(T_NODE * up, T_BUFFER * buffer) {
             
             int value = resolve(up->next->next, 0, 1);
             printf("value = %d\n", value);
+
+#ifdef M68K
+        value = l_endian(value);
+#endif
+
             memcpy( &(buffer->buffer[up->offset]), &value , variable_size(up));
+       
         }
     }
 
