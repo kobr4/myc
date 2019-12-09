@@ -876,7 +876,9 @@ T_NODE * prog_arg(T_NODE * proc, int c) {
 }
 
 void stack_parameters(T_NODE * up, T_BUFFER * buffer, T_NODE * proc, int count) {
-    if (up->elt == NULL || up->type == COM || is_type(up->type))
+    if (up == NULL) return;
+
+    if (up->elt == NULL || up->type == COM || is_type(up->type)) 
         return  stack_parameters(up->next, buffer, proc, count);
 
     display_elt_ctxt("STACK parameter: ", up->elt);  
@@ -999,14 +1001,14 @@ T_NODE * retrieve_expression(T_NODE * up, T_BUFFER * buffer) {
                 asm_load_u32(0, buffer);
                 asm_retrieve_variable_indirect_vs(type_size(variable_decl_lookup(up, buffer)->prev->prev->type), buffer);
             } else { 
-                printf("kikoo %d\n",type_size(variable_decl_lookup(up, buffer)->prev->type));
+                //printf("kikoo %d\n",type_size(variable_decl_lookup(up, buffer)->prev->type));
                 asm_load_u32(0, buffer);
                 //asm_retrieve_variable_indirect_vs(variable_size(variable_decl_lookup(up, buffer)), buffer);
                 asm_retrieve_variable_indirect_vs(type_size(variable_decl_lookup(up, buffer)->prev->type), buffer);
             }            
             
         } else {
-            printf("VS size: %d\n", type_size(variable_decl_lookup(up, buffer)->prev->type));
+            //printf("VS size: %d\n", type_size(variable_decl_lookup(up, buffer)->prev->type));
             int size = type_size(variable_decl_lookup(up, buffer)->prev->type);
             if (is_pointer_access(up)) {
                 size = type_size(variable_decl_lookup(up, buffer)->prev->prev->type);

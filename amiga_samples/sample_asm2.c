@@ -41,7 +41,7 @@ void display(void * gfx_lib_ptr) {
     return;
 }
 
-void loop(int a) {
+void loop() {
     asm {
         loop :
         btst.b #6, ($BFE001).l
@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
     void * gfx_lib_ptr = open_library(gfx_name);
     if (gfx_lib_ptr == 0) return -1;
     display(gfx_lib_ptr);
-    loop(0);
+    loop();
 
     void * int_lib_ptr = open_library(intuition_name);
     remake_display(int_lib_ptr);
