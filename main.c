@@ -1038,9 +1038,7 @@ T_NODE * retrieve_expression(T_NODE * up, T_BUFFER * buffer) {
                 asm_load_u32(0, buffer);
                 asm_retrieve_variable_indirect_vs(type_size(variable_decl_lookup(up, buffer)->prev->prev->type), buffer);
             } else { 
-                //printf("kikoo %d\n",type_size(variable_decl_lookup(up, buffer)->prev->type));
                 asm_load_u32(0, buffer);
-                //asm_retrieve_variable_indirect_vs(variable_size(variable_decl_lookup(up, buffer)), buffer);
                 asm_retrieve_variable_indirect_vs(type_size(variable_decl_lookup(up, buffer)->prev->type), buffer);
             }            
             
@@ -1082,8 +1080,16 @@ T_NODE * handle_expression(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         }
    
         asm_retrieve_variable_u32(get_variable_dynamic_offset(local_offset, buffer), buffer);
-        asm_store_variable_indirect_vs(type_size(variable_decl_lookup(up, buffer)->prev->type), buffer);
+        //printf("Size for store: %d %d\n", type_size(variable_decl_lookup(up, buffer)->prev->type), variable_decl_lookup(up, buffer)->prev->type);
 
+        int size = type_size(variable_decl_lookup(up, buffer)->prev->type);
+        if (is_array_access(up) || is_pointer_access(up)) {
+            T_NODE * decl_n = variable_decl_lookup(up, buffer);
+            if (decl_n->prev->type == PTR && decl_n->desc == NULL) {
+                size = type_size(variable_decl_lookup(up, buffer)->prev->prev->type);
+            } 
+        } 
+        asm_store_variable_indirect_vs(size, buffer);
         unstack_local_symbol(buffer);
     } else {
         retrieve_expression(up, buffer);

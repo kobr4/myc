@@ -5,7 +5,10 @@ void * dos_lib_ptr;
 char hello_msg[] = "hello\n";
 char error_msg[] = "An error as occurred\n";
 char fmt[] = "%ld\n";
+
+int MEMF_ANY = 0;
 int MEMF_CHIP = 2;
+int MEMF_FAST = 4;
 
 void * open_library(char * lib_name) {
     void * lib_ptr;
@@ -85,6 +88,13 @@ int main(int argc, char **argv) {
 
     void * mem_block = alloc_mem(8000, MEMF_CHIP);
     if (mem_block == 0) dos_put_str(error_msg);
+
+    char * ptr = mem_block;
+    for (int i = 0;i < 8000; i++) {
+        ptr[i] = 0;
+    }
+
+
     free_mem(mem_block, 8000);
 
     vprintf(MEMF_CHIP);
