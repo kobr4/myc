@@ -453,13 +453,14 @@ U8 parse_operand(T_BUFFER * buffer, char * input, U8 mn, U8 size) {
         return mn ? M_ADDRESS_DISP << 3 | reg : reg << 3 | M_ADDRESS_DISP;
     }
 
+    char plus;
+    res = sscanf(input, "(a%d)%c", &reg, &plus);
+    if (res == 2 && plus == '+')
+        return mn ? M_ADDRESS_POST_INC << 3 | reg : reg << 3 | M_ADDRESS_POST_INC;
+
     res = sscanf(input, "(a%d)", &reg);
     if (res == 1)
         return mn ? M_ADDRESS << 3 | reg : reg << 3 | M_ADDRESS;
-
-    res = sscanf(input, "(a%d)+", &reg);
-    if (res == 1)
-        return mn ? M_ADDRESS_POST_INC << 3 | reg : reg << 3 | M_ADDRESS_POST_INC;
 
     res = sscanf(input, "#$%x", &offset);
     if (res != 1) res = sscanf(input, "#%d", &offset);
@@ -684,7 +685,11 @@ U16 build_btst(U8 size, U8 mxn, U8 mxn2) {
 }
 
 U16 build_tst(U8 size, U8 mxn) {
-    return qbit(0, 1, 0, 0) << 12 | qbit(1, 0, 1, 0) << 8 | ops2(size) << 6 | mxn;
+    return qbit(0, 1, 0, 0) << 12 | qbit(1, 0, 0, 0) << 8 | qbit(1, 0, 0, 0) << 4 | mxn;
+}
+
+U16 build_swap(enum DN dn) {
+    return qbit(0, 1, 0, 0) << 12 | qbit(1, 0, 1, 0) << 8 | qbit(0, 1, 0, 0) << 4 | dn;
 }
 
 U16 build_lsd(U8 size, U8 direction, U8 mxn) {
@@ -777,6 +782,17 @@ void parse_branch_op(T_ASM_CTXT * ctxt, T_BUFFER * buffer, char * line, U16(*bui
     
     U16 instr = build(size, mxn);
     write_u16_ptr(instr_ptr, instr);
+}
+
+void parse_swap(T_BUFFER * buffer, char * line) {
+    char op[15];
+    U32 dn;
+    line = trim(++line); 
+    token(line, op, 15);
+    int res = sscanf(op, "d%d", &dn);
+    if (res == 1) {
+        write_u16(buffer, build_swap(dn));
+    } else ASM_ERROR;
 }
 
 void parse_dual_op(T_BUFFER * buffer, char * line, U16(*build)(U8, U8, U8) ) {
@@ -986,6 +1002,9 @@ int asm_line(T_ASM_CTXT * ctxt, T_BUFFER * buffer, char * line) {
     } else if (strncmp(cline, "rts", 3) == 0) {
         cline += 3;
         rts(buffer);
+    } else if (strncmp(cline, "swap", 4) == 0) {
+        cline += 4;
+        parse_swap(buffer, cline);
     } else error("Invalid inline ASM.");
     
     return 0;

@@ -577,6 +577,15 @@ static void parse_btst_test(void **state) {
 }
 
 
+static void parse_swap_test(void **state) {
+    T_BUFFER * buffer = create_buffer();
+    U8 tab[] = { 0x4a, 0x40 };
+    asm_line(NULL, buffer, "swap d0");
+    assert_memory_equal(buffer->buffer, tab, sizeof(tab));
+    assert_int_equal(buffer->length, sizeof(tab));
+    free(buffer); 
+}
+
 int main(void) {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(rts_test),
@@ -637,7 +646,8 @@ int main(void) {
         cmocka_unit_test(parse_clr_test),
         cmocka_unit_test(parse_rts_test),
         cmocka_unit_test(parse_btst_test),  
-        cmocka_unit_test(parse_beq_backpatch_label_test),              
+        cmocka_unit_test(parse_beq_backpatch_label_test),        
+        cmocka_unit_test(parse_swap_test),       
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }
