@@ -29,13 +29,16 @@ enum keyword {
     WHILE,
     DO,
     AND,
+    ANDAND,
     BR_O,
     BR_C,
     CUSTOM_T,
     DIV,
     STR,
     CCHAR,
-    ASM
+    ASM,
+    OR,
+    OROR
 } T_KEYWORD;
 
 typedef struct T_CTXT {

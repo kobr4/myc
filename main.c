@@ -77,6 +77,8 @@ enum keyword type(T_ELT * elt) {
     else if (elt->len == 4 && strncmp(elt->str, "else", elt->len) == 0) result = ELSE;
     else if (elt->len == 6 && strncmp(elt->str, "return", elt->len) == 0) result = RET;
     else if (elt->len == 2 && strncmp(elt->str, "==", elt->len) == 0) result = EQEQ;
+    else if (elt->len == 2 && strncmp(elt->str, "&&", elt->len) == 0) result = ANDAND;
+    else if (elt->len == 2 && strncmp(elt->str, "||", elt->len) == 0) result = OROR;
     else if (elt->len == 2 && strncmp(elt->str, "!=", elt->len) == 0) result = NEQ;
     else if (elt->len == 3 && strncmp(elt->str, "for", elt->len) == 0) result = FOR;
     else if (elt->len == 2 && strncmp(elt->str, "++", elt->len) == 0) result = ADDADD;
@@ -95,6 +97,7 @@ enum keyword type(T_ELT * elt) {
     else if (strncmp(elt->str, "+", elt->len) == 0) result = ADD;
     else if (strncmp(elt->str, "-", elt->len) == 0) result = SUB;
     else if (strncmp(elt->str, ";", elt->len) == 0) result = END;
+    else if (strncmp(elt->str, "|", elt->len) == 0) result = OR;
     else if (strncmp(elt->str, ",", elt->len) == 0) result = COM;
     else if (strncmp(elt->str, "=", elt->len) == 0) result = EQ;
     else if (strncmp(elt->str, ">", elt->len) == 0) result = SUP;
@@ -312,6 +315,7 @@ T_ELT * tokenize(char * input,int size) {
             case '+':            
             case '=':
             case '&':
+            case '|':
                 if (current_exp == -1) {
                     current_exp = c;
                 } else if (input[c-1] == elt)  {
@@ -373,7 +377,8 @@ T_ELT * tokenize(char * input,int size) {
             default:
                 if (current_exp == -1) {
                     current_exp = c;
-                } else if (input[c-1] == '=' || input[c-1] == '+' || input[c-1] == '-' || input[c-1] == '&' || input[c-1] == '*')  {
+                } else if (input[c-1] == '=' || input[c-1] == '+' || input[c-1] == '-' 
+                    || input[c-1] == '&' || input[c-1] == '*' || input[c-1] == '|')  {
                     current = add_token(current, &input[current_exp], c-current_exp, line);
                     current_exp = c;                     
                 }
@@ -432,6 +437,9 @@ void create_node_expr(T_NODE * up, T_ELT * current) {
         case COM:
         case FOR:
         case ADDADD:
+        case ANDAND:
+        case OROR:
+        case OR:
         case SUBSUB:
         case WHILE:
         case DO:
@@ -556,6 +564,16 @@ int resolve(T_NODE * node, int left, char do_next) {
     if (node->type == SUB) {
         return left - resolve(next, 0, do_next);
     }
+
+    if (node->type == OR) {
+        return left | resolve(next, 0, do_next);
+    }
+
+    if (node->type == AND) {
+        return left & resolve(next, 0, do_next);
+    }
+
+
     if (node->type == PTR) {
         return left * resolve(next, 0, do_next);
     }
@@ -568,7 +586,12 @@ int resolve(T_NODE * node, int left, char do_next) {
 
         value[elt->len] = 0;
 
-        int v = atoi(value);
+        int v;
+        int res = sscanf(value,"0x%x", &v);
+        if (res == 0) {
+            res = sscanf(value,"%d", &v);
+        }
+        //int v = atoi(value);
         
         if (left != 0) error_elt(elt, "Syntax error");
         return resolve(next, v, do_next);
