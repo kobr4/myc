@@ -549,6 +549,15 @@ static void parse_not_test(void **state) {
     free(buffer);
 }
 
+static void parse_not_test2(void **state) {
+    T_BUFFER * buffer = create_buffer();
+    U8 tab[] = { 0x46, 0x80 };
+    asm_line(NULL, buffer, "not.l d0");
+    assert_memory_equal(buffer->buffer, tab, sizeof(tab));
+    assert_int_equal(buffer->length, sizeof(tab));
+    free(buffer);
+}
+
 static void parse_clr_test(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x42, 0x78, 0x85, 0x00 };
@@ -576,11 +585,55 @@ static void parse_btst_test(void **state) {
     free(buffer);    
 }
 
+static void parse_bset_test(void **state) {
+    T_BUFFER * buffer = create_buffer();
+    U8 tab[] = { 0x09, 0xF9, 0x00, 0x06, 0x00, 0xBF, 0xe0, 0x01 };
+    asm_line(NULL, buffer, "bset.b #6,($BFE001).l");
+    assert_memory_equal(buffer->buffer, tab, sizeof(tab));
+    assert_int_equal(buffer->length, sizeof(tab));
+    free(buffer);    
+}
+
+static void parse_bclr_test(void **state) {
+    T_BUFFER * buffer = create_buffer();
+    U8 tab[] = { 0x09, 0xB9, 0x00, 0x06, 0x00, 0xBF, 0xe0, 0x01 };
+    asm_line(NULL, buffer, "bclr.b #6,($BFE001).l");
+    assert_memory_equal(buffer->buffer, tab, sizeof(tab));
+    assert_int_equal(buffer->length, sizeof(tab));
+    free(buffer);    
+}
+
+static void parse_bchg_test(void **state) {
+    T_BUFFER * buffer = create_buffer();
+    U8 tab[] = { 0x09, 0x79, 0x00, 0x06, 0x00, 0xBF, 0xe0, 0x01 };
+    asm_line(NULL, buffer, "bchg.b #6,($BFE001).l");
+    assert_memory_equal(buffer->buffer, tab, sizeof(tab));
+    assert_int_equal(buffer->length, sizeof(tab));
+    free(buffer);    
+}
 
 static void parse_swap_test(void **state) {
     T_BUFFER * buffer = create_buffer();
     U8 tab[] = { 0x4a, 0x40 };
     asm_line(NULL, buffer, "swap d0");
+    assert_memory_equal(buffer->buffer, tab, sizeof(tab));
+    assert_int_equal(buffer->length, sizeof(tab));
+    free(buffer); 
+}
+
+static void parse_ror_test(void **state) {
+    T_BUFFER * buffer = create_buffer();
+    U8 tab[] = { 0xE2, 0x9B };
+    asm_line(NULL, buffer, "ror.l #1, d3");
+    assert_memory_equal(buffer->buffer, tab, sizeof(tab));
+    assert_int_equal(buffer->length, sizeof(tab));
+    free(buffer); 
+}
+
+static void parse_ror_test2(void **state) {
+    T_BUFFER * buffer = create_buffer();
+    U8 tab[] = { 0xE2, 0x1B };
+    asm_line(NULL, buffer, "ror.b #1, d3");
     assert_memory_equal(buffer->buffer, tab, sizeof(tab));
     assert_int_equal(buffer->length, sizeof(tab));
     free(buffer); 
@@ -637,17 +690,23 @@ int main(void) {
         cmocka_unit_test(parse_beq_label_test),
         cmocka_unit_test(parse_move_to_local_symbol_test),
         cmocka_unit_test(parse_move_from_local_symbol_test),
-        cmocka_unit_test(parse_lsl_test),
-        cmocka_unit_test(parse_lsr_test),
+//        cmocka_unit_test(parse_lsl_test),
+//        cmocka_unit_test(parse_lsr_test),
         cmocka_unit_test(parse_asl_test),
         cmocka_unit_test(parse_asr_test),
         cmocka_unit_test(parse_neg_test),
-        cmocka_unit_test(parse_not_test), 
+        cmocka_unit_test(parse_not_test),
+        cmocka_unit_test(parse_not_test2),  
         cmocka_unit_test(parse_clr_test),
         cmocka_unit_test(parse_rts_test),
         cmocka_unit_test(parse_btst_test),  
+        cmocka_unit_test(parse_bset_test), 
+        cmocka_unit_test(parse_bclr_test),
+        cmocka_unit_test(parse_bchg_test), 
         cmocka_unit_test(parse_beq_backpatch_label_test),        
-        cmocka_unit_test(parse_swap_test),       
+        cmocka_unit_test(parse_swap_test),
+        cmocka_unit_test(parse_ror_test), 
+        cmocka_unit_test(parse_ror_test2),      
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

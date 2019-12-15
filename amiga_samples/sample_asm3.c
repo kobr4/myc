@@ -104,6 +104,18 @@ int is_mouse_pressed() {
     return ret;
 }
 
+int is_mouse_pressed2() {
+    int ret = 0;
+    asm {
+        btst.b #7, ($BFE001).l
+        bne.w loop
+        move.l #1, ret 
+        loop :
+    }
+
+    return ret;
+}
+
 void remake_display(void * lib_ptr) {
     asm {
         move.l lib_ptr, a6
@@ -196,6 +208,18 @@ void close_font(void * gfx_lib_ptr, char * font_ptr) {
     return;   
 }
 
+short key_press() {
+    short code = 0;
+    asm {     
+        move.l #0, d0
+        move.b ($BFEC01).l, d0
+        not.b d0
+        ror.b #1, d0
+        move.w d0, code
+    }
+    return code;
+}
+
 
 int main(int argc, char **argv) {
     
@@ -259,23 +283,35 @@ int main(int argc, char **argv) {
         move.w  #$3FFF, ($DFF09A).l ;INTENA 
                  
         move.w  #$FFF, ($DFF180).l  ;COLOR 0 to WHITE
-        move.w  #$F00, ($DFF19E).l  ;COLOR 15 to BLACK   
- 
+        move.w  #$F00, ($DFF19E).l  ;COLOR 15 to BLACK
+    
     }  
     int f_counter = 0;
 
     short modulo = display_font(mem_block, font_ptr);
 
-    while (is_mouse_pressed() == 0) {
+    void * mem_ptr = mem_block;
+    short k = 0;
+    while (k != 96) {
         
-        set_bp(mem_block, 14676194, 14676192);
-        set_bp(mem_block, 14676198, 14676196);
-        set_bp(mem_block, 14676202, 14676200);
-        set_bp(mem_block, 14676206, 14676204);
-        set_bp(mem_block, 14676210, 14676208);
-        set_bp(mem_block, 14676214, 14676212);  
+
+        set_bp(mem_ptr, 14676194, 14676192);
+        set_bp(mem_ptr, 14676198, 14676196);
+        set_bp(mem_ptr, 14676202, 14676200);
+        set_bp(mem_ptr, 14676206, 14676204);
+        set_bp(mem_ptr, 14676210, 14676208);
+        set_bp(mem_ptr, 14676214, 14676212);  
+
+        k = key_press();
         
-        
+        if (is_mouse_pressed()) {
+            mem_ptr = mem_ptr - 320;
+        }
+
+        if (is_mouse_pressed2()) {
+            mem_ptr = mem_ptr + 320;            
+        }
+
         f_counter++; 
         
         wait_vbl();
@@ -304,12 +340,18 @@ int main(int argc, char **argv) {
     free_mem(mem_block, 8000);
     vprintf(f_counter);
     vprintf(modulo);
+    
 
 
     if (font_ptr != 0) close_font(gfx_lib_ptr, font_ptr);
     close_library(gfx_lib_ptr);
     close_library(int_lib_ptr);
     close_library(dos_lib_ptr);
+
+    while(1) {
+        k = key_press();
+        vprintf(k);
+    }
 
     return 0;
 }

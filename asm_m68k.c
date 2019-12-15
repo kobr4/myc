@@ -432,6 +432,19 @@ int retrieve_local_symbol(T_BUFFER * buffer, char * input) {
     return -1;
 }
 
+U8 parse_imm_operand(T_BUFFER * buffer, char * input, U8 mn, U8 size) {
+    int offset = 0;
+    int res = 0;
+
+    res = sscanf(input, "#$%x", &offset);
+    if (res != 1) res = sscanf(input, "#%d", &offset);
+    if (res == 1){       
+        return offset;
+    }
+    
+    ASM_ERROR;
+}
+
 
 U8 parse_operand(T_BUFFER * buffer, char * input, U8 mn, U8 size) {
     int offset = 0;
@@ -684,6 +697,21 @@ U16 build_btst(U8 size, U8 mxn, U8 mxn2) {
     return qbit(0, 0, 0, 0) << 12 | mxn << 9 | (mxn == XN_IMMEDIATE ? 0 : 1) << 8 | 0 << 6 | mxn2 >> 3 | ((mxn2 & qbit(0, 1, 1, 1)) << 3);
 }
 
+U16 build_bset(U8 size, U8 mxn, U8 mxn2) {
+    mxn = mxn & qbit(0, 1, 1, 1);
+    return qbit(0, 0, 0, 0) << 12 | mxn << 9 | (mxn == XN_IMMEDIATE ? 0 : 1) << 8 | qbit(0, 1, 1, 1) << 6 | mxn2 >> 3 | ((mxn2 & qbit(0, 1, 1, 1)) << 3);
+}
+
+U16 build_bclr(U8 size, U8 mxn, U8 mxn2) {
+    mxn = mxn & qbit(0, 1, 1, 1);
+    return qbit(0, 0, 0, 0) << 12 | mxn << 9 | (mxn == XN_IMMEDIATE ? 0 : 1) << 8 | qbit(0, 1, 1, 0) << 6 | mxn2 >> 3 | ((mxn2 & qbit(0, 1, 1, 1)) << 3);
+}
+
+U16 build_bchg(U8 size, U8 mxn, U8 mxn2) {
+    mxn = mxn & qbit(0, 1, 1, 1);
+    return qbit(0, 0, 0, 0) << 12 | mxn << 9 | (mxn == XN_IMMEDIATE ? 0 : 1) << 8 | qbit(0, 1, 0, 1) << 6 | mxn2 >> 3 | ((mxn2 & qbit(0, 1, 1, 1)) << 3);
+}
+
 U16 build_tst(U8 size, U8 mxn) {
     return qbit(0, 1, 0, 0) << 12 | qbit(1, 0, 0, 0) << 8 | qbit(1, 0, 0, 0) << 4 | mxn;
 }
@@ -692,8 +720,36 @@ U16 build_swap(enum DN dn) {
     return qbit(0, 1, 0, 0) << 12 | qbit(1, 0, 1, 0) << 8 | qbit(0, 1, 0, 0) << 4 | dn;
 }
 
+U16 build_lsd_imm(U8 size, U8 direction, U8 mxn, U8 mxn2) {
+    return qbit(1, 1, 1, 0) << 12 | mxn << 9 | direction << 8 | ops2(size) << 6 |  0 << 5 | qbit(0, 0, 0, 1) << 3 | mxn2 >> 3;
+}
+
+U16 build_rod_imm(U8 size, U8 direction, U8 mxn, U8 mxn2) {
+    return qbit(1, 1, 1, 0) << 12 | mxn << 9 | direction << 8 | ops2(size) << 6 |  0 << 5 | qbit(0, 0, 1, 1) << 3 | mxn2 >> 3;
+}
+
 U16 build_lsd(U8 size, U8 direction, U8 mxn) {
-    return qbit(1, 1, 1, 0) << 12 | qbit(0, 0, 0,10) << 9 | qbit(0, 0, 1, 1) << 6 | direction << 8;
+    return qbit(1, 1, 1, 0) << 12 | qbit(0, 0, 0, 1) << 9 | qbit(0, 0, 1, 1) << 6 | direction << 8;
+}
+
+U16 build_rod(U8 size, U8 direction, U8 mxn) {
+    return qbit(1, 1, 1, 0) << 12 | qbit(0, 0, 1, 1) << 9 | qbit(0, 0, 1, 1) << 6 | direction << 8;
+}
+
+U16 build_lsr_imm(U8 size, U8 mxn, U8 mxn2) {
+    return build_lsd_imm(size, D_RIGHT, mxn, mxn2);
+}
+
+U16 build_lsl_imm(U8 size, U8 mxn, U8 mxn2) {
+    return build_lsd_imm(size, D_LEFT, mxn, mxn2);
+}
+
+U16 build_ror_imm(U8 size, U8 mxn, U8 mxn2) {
+    return build_rod_imm(size, D_RIGHT, mxn, mxn2);
+}
+
+U16 build_rol_imm(U8 size, U8 mxn, U8 mxn2) {
+    return build_rod_imm(size, D_LEFT, mxn, mxn2);
 }
 
 U16 build_lsr(U8 size, U8 mxn) {
@@ -702,6 +758,14 @@ U16 build_lsr(U8 size, U8 mxn) {
 
 U16 build_lsl(U8 size, U8 mxn) {
     return build_lsd(size, D_LEFT, mxn);
+}
+
+U16 build_ror(U8 size, U8 mxn) {
+    return build_rod(size, D_RIGHT, mxn);
+}
+
+U16 build_rol(U8 size, U8 mxn) {
+    return build_rod(size, D_LEFT, mxn);
 }
 
 U16 build_asd(U8 size, U8 direction, U8 mxn) {
@@ -793,6 +857,23 @@ void parse_swap(T_BUFFER * buffer, char * line) {
     if (res == 1) {
         write_u16(buffer, build_swap(dn));
     } else ASM_ERROR;
+}
+
+void parse_bit_op(T_BUFFER * buffer, char * line, U16(*build)(U8, U8, U8) ) {
+    char op1[15], op2[15];
+    U8 size;
+ 
+    line = parse_size(line, &size);
+    line = trim(++line);    
+    parse_dual_token(line, op1, op2);      
+   
+    U8 * instr_ptr = &buffer->buffer[buffer->length];
+    buffer->length += 2;    
+    U8 mxn = parse_imm_operand(buffer, op1, 1, size);
+    U8 mxn2 = parse_operand(buffer, op2, 0, size);
+    
+    U16 instr = build(size, mxn, mxn2);
+    write_u16_ptr(instr_ptr, instr);
 }
 
 void parse_dual_op(T_BUFFER * buffer, char * line, U16(*build)(U8, U8, U8) ) {
@@ -972,15 +1053,30 @@ int asm_line(T_ASM_CTXT * ctxt, T_BUFFER * buffer, char * line) {
     } else if (strncmp(cline, "btst", 4) == 0) {
         cline += 4;
         parse_dual_op(buffer, cline, build_btst);
+    } else if (strncmp(cline, "bset", 4) == 0) {
+        cline += 4;
+        parse_dual_op(buffer, cline, build_bset);
+    } else if (strncmp(cline, "bclr", 4) == 0) {
+        cline += 4;
+        parse_dual_op(buffer, cline, build_bclr);
+    } else if (strncmp(cline, "bchg", 4) == 0) {
+        cline += 4;
+        parse_dual_op(buffer, cline, build_bchg);
     } else if (strncmp(cline, "tst", 3) == 0) {
         cline += 3;
         parse_single_op(buffer, cline, build_tst);
     } else if (strncmp(cline, "lsl", 3) == 0) {
         cline += 3;
-        parse_single_op(buffer, cline, build_lsl);
+        parse_bit_op(buffer, cline, build_lsl_imm);
     } else if (strncmp(cline, "lsr", 3) == 0) {
         cline += 3;
-        parse_single_op(buffer, cline, build_lsr);
+        parse_bit_op(buffer, cline, build_lsr_imm);
+    } else if (strncmp(cline, "rol", 3) == 0) {
+        cline += 3;
+        parse_bit_op(buffer, cline, build_rol_imm);
+    } else if (strncmp(cline, "ror", 3) == 0) {
+        cline += 3;
+        parse_bit_op(buffer, cline, build_ror_imm);
     } else if (strncmp(cline, "asr", 3) == 0) {
         cline += 3;
         parse_single_op(buffer, cline, build_asr);
