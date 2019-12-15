@@ -60,4 +60,5 @@ out
 *.s
 fibo
 emu.sh
+run-emu.sh
 asm_m68k_test

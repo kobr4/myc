@@ -558,6 +558,7 @@ int resolve(T_NODE * node, int left, char do_next) {
     T_NODE * next = (do_next == 1) ? node->next : NULL; 
 
     if (node->elt == NULL) return resolve(next, left, do_next);
+
     if (node->type == ADD) {
         return left + resolve(next, 0, do_next);
     } 
@@ -587,11 +588,11 @@ int resolve(T_NODE * node, int left, char do_next) {
         value[elt->len] = 0;
 
         int v;
-        int res = sscanf(value,"0x%x", &v);
-        if (res == 0) {
+        int res = sscanf(value,"%*[0]%*[x]%x", &v);
+        if (res != 1) {
             res = sscanf(value,"%d", &v);
+            if (res == 0) error_elt(node->elt, "Invalid value");
         }
-        //int v = atoi(value);
         
         if (left != 0) error_elt(elt, "Syntax error");
         return resolve(next, v, do_next);
@@ -1023,10 +1024,7 @@ void retrieve_setup(T_NODE * up, T_BUFFER * buffer) {
         if (is_array_access(up)) {
 #ifdef X86
             asm_mov_eax_eax_addr(buffer);
-#elif defined M68K
-            //HACKY stuff need proper reloc
-            //add_imm(buffer, D0, 4, 4);
-            
+#elif defined M68K            
             move_reg_addr(buffer, D0, A1, 4);
             asm_retrieve_variable_indirect_vs_an(4, buffer, A1);
             
@@ -1135,6 +1133,7 @@ T_NODE * step(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
 #ifdef X86        
         asm_load_eax(resolve(up, 0, 0), buffer);
 #elif defined M68K
+        printf("Resolve: %d\n",resolve(up, 0, 0));
         move_imm(buffer, D0, resolve(up, 0, 0), 4);
 #endif        
         return up;
