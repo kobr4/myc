@@ -1,8 +1,13 @@
 #!/bin/bash
 
-gcc -D X86 main.c -o main
-
-OUTBIN="./out"
+if [ $# = "1" ] && [ $1 = "m68k" ]
+then
+    gcc -D M68K main.c -o main
+    OUTBIN="./hunkemu hunk"
+else
+    gcc -D X86 main.c -o main
+    OUTBIN="./out"
+fi
 
 SOURCE="sample.c"
 ITEM="1: $SOURCE"

@@ -41,6 +41,18 @@ These tests are samples programs compiled for x86 which output are compared to t
   ./run-tests.sh
 ```
 
+The test suite can also be compiled for Amiga M68K, the suite will be run with a little M68K CPU emulator based on Musashi.
+First compile the CPU emulator
+```bash
+  cd hunkemu_m68k
+  ./build.sh
+```
+
+Then run the test suite with the following command:
+```bash
+  ./run-tests.sh m68k
+```
+
 ## Missing features
 
 * No operator priority : expression are evaluated from left to right

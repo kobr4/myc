@@ -104,8 +104,6 @@ void write_hunk(char * filename, T_BUFFER * buffer) {
     //header.hunk_sizes[0] = l_endian(code.n * 4 + 3 * sizeof(U32));
     
     header.hunk_sizes[0] = l_endian(code.n * 4  + 1000); 
-    
-    header.hunk_sizes[1] = l_endian(0);
 
     fwrite(&header.magic, sizeof(header.magic), 1, f);
     fwrite(&header.empty_list, sizeof(header.empty_list), 1, f);
