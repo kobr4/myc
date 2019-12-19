@@ -873,7 +873,7 @@ int add_global_symbol(T_NODE * up, T_BUFFER * buffer) {
             printf("value = %d\n", value);
 
 #ifdef M68K
-        value = l_endian(value);
+        if (variable_size(up) > 1) value = l_endian(value);
 #endif
 
             memcpy( &(buffer->buffer[up->offset]), &value , variable_size(up));
@@ -1101,8 +1101,7 @@ T_NODE * handle_expression(T_NODE * up, int stack_offset, T_BUFFER * buffer) {
         }
    
         asm_retrieve_variable_u32(get_variable_dynamic_offset(local_offset, buffer), buffer);
-        //printf("Size for store: %d %d\n", type_size(variable_decl_lookup(up, buffer)->prev->type), variable_decl_lookup(up, buffer)->prev->type);
-
+ 
         int size = type_size(variable_decl_lookup(up, buffer)->prev->type);
         if (is_array_access(up) || is_pointer_access(up)) {
             T_NODE * decl_n = variable_decl_lookup(up, buffer);

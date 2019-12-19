@@ -168,6 +168,7 @@ short display_font(char * mem_block, void * font_ptr) {
         addi.l #2, d0
         cmp.l #20, d0
         bne.w loop
+        move.w #0, (a3)+
         addi.l #1, d1
         adda.l #152, a2
         cmp.l #8, d1
@@ -235,11 +236,11 @@ int main(int argc, char **argv) {
     void * font_ptr = open_font(gfx_lib_ptr, font);
     if (font_ptr == 0) dos_put_str(font_error_msg);
 
-    void * mem_block = alloc_mem(8000, MEMF_CHIP);
+    void * mem_block = alloc_mem(8400, MEMF_CHIP);
     if (mem_block == 0) dos_put_str(error_msg);
 
     char * ptr = mem_block;
-    for (int i = 0;i < 8000; i++) {
+    for (int i = 0;i < 8400; i++) {
         ptr[i] = 1;
     }
 
@@ -269,8 +270,8 @@ int main(int argc, char **argv) {
         move.w  #$3200, ($DFF100).l ;BPLCON0
         move.w  #$0000, ($DFF102).l ;BPLCON1
 
-        move.w  #$0000, ($DFF108).l ;BPL1MOD
-        move.w  #$0000, ($DFF10A).l ;BPL2MOD
+        move.w  #$0002, ($DFF108).l ;BPL1MOD
+        move.w  #$0002, ($DFF10A).l ;BPL2MOD
 
         move.w  #$2c81, ($DFF08E).l ;DIWSTRT
         move.w  #$c8d1, ($DFF090).l ;DIWSTOP
@@ -288,12 +289,19 @@ int main(int argc, char **argv) {
     }  
     int f_counter = 0;
 
-    short modulo = display_font(mem_block, font_ptr);
+    //short modulo = display_font(mem_block, font_ptr);
+    short modulo = 0;
 
     void * mem_ptr = mem_block;
     short k = 0;
+    short h_delay = 0;
     while (k != 96) {
         
+        asm {
+            move.w #70, d0
+            add.w h_delay, d0
+            move.w  d0, ($DFF102).l ;BPLCON1
+        }
 
         set_bp(mem_ptr, 14676194, 14676192);
         set_bp(mem_ptr, 14676198, 14676196);
@@ -305,17 +313,20 @@ int main(int argc, char **argv) {
         k = key_press();
         
         if (is_mouse_pressed()) {
-            mem_ptr = mem_ptr - 320;
+            mem_ptr = mem_ptr - 336;
         }
 
         if (is_mouse_pressed2()) {
-            mem_ptr = mem_ptr + 320;            
+            mem_ptr = mem_ptr + 336;            
         }
 
         f_counter++; 
         
         wait_vbl();
         
+
+        h_delay++;
+        if (h_delay == 16) h_delay = 0;
     }
 
     
@@ -337,7 +348,7 @@ int main(int argc, char **argv) {
 
     void * int_lib_ptr = open_library(intuition_name);
     remake_display(int_lib_ptr);
-    free_mem(mem_block, 8000);
+    free_mem(mem_block, 8400);
     vprintf(f_counter);
     vprintf(modulo);
     
