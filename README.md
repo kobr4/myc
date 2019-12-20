@@ -117,11 +117,61 @@ A little explanation of the sample code: to be able to output text in a shell in
 
 ### Motorola 68000 architecture
 
-TODO
+The Motorola 68000 is a 16/32 bit CISC microprocessor that first appeared in 1979.   
+16/32 bit stands for 32 bit registers and 16 bit data bus, note that address registers are only 24 bit which only allows for a maximum of 16 MB of memory.
+If features 8 general registers : D0...D7, and 8 address registers, A0...A7, notably, A7 is also the stack register (SP).
+
+| Addressing mode                    | Format       | Note         |
+|------------------------------------|--------------|--------------|
+| Data register                      | Dn           |              |
+| Address register                   | An           |              |
+| Address                            | (An)         |              |
+| Address with Postincrement         | (An)+        |              |
+| Address with Predrecrement         | -(An)        |              |
+| Address with Displacement          | (d16, An)    |              |
+| Address with Index                 | (d8, An, Xn) |Not supported |
+| Program Counter with Displacement  | (d16, PC)    |              |
+| Program Counter with Index         | (d8, PC, Xn) |Not supported |
+| Absolute Short                     | (xxx).W      |              |
+| Absolute Long                      | (xxx).L      |              |
+| Immediate                          | #Imm         |              |
+
+Comparetively to the X86 instruction set, the large number of registers and the large number of addressing modes makes it easy to hand write assembly, some may say it feels like a high level language in some way. This advantage disappear when using a compiler. 
 
 ### Assembly syntax
 
-TODO
+The compiler supports inline assembly statments.
+```C
+asm {
+  ...
+}
+```
+
+Asm syntax follow a classical Motorola 68000 format :
+
+For instance:
+```ASM
+move.l #1, d0
+```
+".l" : on variable length instruction, specifies the length of the instruction, ".b" for 1 byte, ".w" for 2 bytes, ".l" for 4 bytes.
+#1 : # is for immediate value, additionnally, '$' adding after  '#' means that the value is in hexadecimal format.
+d0 : is for D0 register, valid values are d0-d7 or a0-a7 
+Refer to the "Format" column for the different addressing mode.
+
+It is also possible to use C declared local variable in the asm context:
+```C
+int a = 0;
+asm {
+  move.l a, d0
+}
+```
+As local variable are declared in the stack, it is equivalent as:
+```C
+int a = 0;
+asm {
+  move.l -4(a7), d0
+}
+```
 
 ## ELF 32bit executable format
 
