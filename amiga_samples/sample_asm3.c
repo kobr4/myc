@@ -2,7 +2,7 @@ char dos_name[] = "dos.library";
 char gfx_name[] = "graphics.library";
 char intuition_name[] = "intuition.library";
 void * dos_lib_ptr;
-char hello_msg[] = "hello\n";
+char hello_msg[] = "Joyeux Noel les petits loups !\n";
 char error_msg[] = "An error as occurred\n";
 char font_error_msg[] = "Couldn't load font.\n";
 char fmt[] = "%ld\n";
@@ -10,6 +10,9 @@ char font[] = "topaz.font";
 int MEMF_ANY = 0;
 int MEMF_CHIP = 2;
 int MEMF_FAST = 4;
+char sound[] = { 100, 98, 92, 83, 71, 56, 38, 20, 0, -20, -38, -56, -71, -83, -92, -83, -100, -98, -92, -83, -71, -56, -38, -20, 0, 20, 38, 56, 71, 83, 92, 98};
+//char sound[] = {0,40,90,110,127,110,90,40,0,-40,-90,-110,-127,-110,-90,-40};
+
 
 void * open_library(char * lib_name) {
     void * lib_ptr;
@@ -54,7 +57,7 @@ void dos_put_str(char * msg) {
         jsr -948(a6)        
     }
     return;
-}
+}play_sound
 
 void * alloc_mem(int size, int flag) {
     void * mem_block;
@@ -187,10 +190,8 @@ void * open_font(void * gfx_lib_ptr, char * font_name) {
     void * font;
     short size = 8;
     int t = 0;
-    void * toto = &t;
     asm {
         move.l gfx_lib_ptr, a6
-        move.l toto, a0
         move.l font_name, (a0)
 	    jsr -72(a6)
         move.l d0, font
@@ -221,6 +222,51 @@ short key_press() {
     return code;
 }
 
+void play_sound(char * audio_data) {
+    asm {
+        move.l audio_data, ($DFF0A0).l
+        move.w #16, ($DFF0A4).l ;SET AUDIO LEN
+        move.w #64, ($DFF0A8).l ;SET AUDIO VOL
+        move.w #200, ($DFF0A6).l ;SET AUD0PER
+        move.w #$8201, ($DFF096).l ;DMACON
+    }
+
+    return;
+}
+
+void display_message(void * mem_block, char * font_ptr, char * message) {
+
+    asm {
+        move.l message, a2
+        move.l font_ptr, a1
+        move.l 34(a1), a1
+        move.l #0, d2
+        loop2 :
+        move.l mem_block, a0
+        adda.l d2, a0
+        move.l #0, d1
+        move.b (a2)+, d1
+        subi.b #32, d1
+        move.l a1, a3
+        adda.w d1, a3
+        move.l #0, d0
+        loop :
+        move.b (a3)+, (a0)+
+        adda.l #191, a3
+        adda.l #41, a0
+        addi.l #1, d0 
+        cmp.l #8, d0
+        bne.w loop
+        move.l #0, d1
+        move.b (a2), d1
+        add.l #1, d2
+        cmp.b #10, d1
+        bne.w loop2
+    }
+
+    return;
+}
+
 
 int main(int argc, char **argv) {
     
@@ -241,7 +287,7 @@ int main(int argc, char **argv) {
 
     char * ptr = mem_block;
     for (int i = 0;i < 8400; i++) {
-        ptr[i] = 1;
+        ptr[i] = 0;
     }
 
     short olddmareq = 0;
@@ -291,17 +337,22 @@ int main(int argc, char **argv) {
 
     //short modulo = display_font(mem_block, font_ptr);
     short modulo = 0;
+    display_message(mem_block + 4200, font_ptr, hello_msg);
 
     void * mem_ptr = mem_block;
     short k = 0;
     short h_delay = 0;
-    while (k != 96) {
+    short count  = 0;
+
+    play_sound(sound);
+
+    while (is_mouse_pressed() == 0) {
         
         asm {
-            move.w #70, d0
-            add.w h_delay, d0
-            move.w  d0, ($DFF102).l ;BPLCON1
+            move.w h_delay, d0
+            move.w d0, ($DFF102).l ;BPLCON1
         }
+        
 
         set_bp(mem_ptr, 14676194, 14676192);
         set_bp(mem_ptr, 14676198, 14676196);
@@ -325,8 +376,15 @@ int main(int argc, char **argv) {
         wait_vbl();
         
 
+
         h_delay++;
-        if (h_delay == 16) h_delay = 0;
+        if (h_delay == 16) {
+            mem_ptr = mem_ptr - 2;
+            count = count + 2;
+            h_delay = 0;
+        }
+
+
     }
 
     
@@ -358,11 +416,11 @@ int main(int argc, char **argv) {
     close_library(gfx_lib_ptr);
     close_library(int_lib_ptr);
     close_library(dos_lib_ptr);
-
+/*
     while(1) {
         k = key_press();
         vprintf(k);
     }
-
+*/
     return 0;
 }

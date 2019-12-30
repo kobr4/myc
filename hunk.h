@@ -6,7 +6,7 @@
 #include <stdio.h>
 
 #define SETUP_LENGTH 6
-
+#define CHIP_RAM 1 << 30
 typedef struct T_HUNK_HEADER {
     U32 magic;
     U32 empty_list;
@@ -103,7 +103,7 @@ void write_hunk(char * filename, T_BUFFER * buffer) {
     header.hunk_sizes = (U32*)malloc(sizeof(U32)*2);
     //header.hunk_sizes[0] = l_endian(code.n * 4 + 3 * sizeof(U32));
     
-    header.hunk_sizes[0] = l_endian(code.n * 4  + 1000); 
+    header.hunk_sizes[0] = l_endian(code.n * 4  + 1000 | CHIP_RAM); 
 
     fwrite(&header.magic, sizeof(header.magic), 1, f);
     fwrite(&header.empty_list, sizeof(header.empty_list), 1, f);

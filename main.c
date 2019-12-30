@@ -607,6 +607,10 @@ int resolve(T_NODE * node, int left, char do_next) {
         return left;
     }
 
+    if (node->type == COM) {
+        return left;
+    }
+
     return resolve(next, left, do_next);
 }
 
@@ -848,6 +852,20 @@ int add_global_symbol(T_NODE * up, T_BUFFER * buffer) {
                 memcpy( &(buffer->buffer[buffer->length]), s, strlen(s));
                 buffer->length += strlen(s);
                 buffer->buffer[buffer->length++] = 0;
+            } else if (up->next->desc != NULL && up->next->desc->type == ACC_O) {
+                T_NODE * token = up->next->desc->desc->next;
+                
+                while(token != NULL && token->type != ACC_C) {
+                
+                    int value = resolve(token, 0, 1);
+                    printf("value = %d\n", value);
+                    //write_value(buffer, value, 1);
+                    buffer->buffer[buffer->length++] = (value & 0xFF);
+                    token = token->next;
+                    if (token != NULL && token->type == COM) {
+                        token = token->next;
+                    }
+                }
             } else {
                 error_elt(up->elt,"Unsupported declaration");
             }
